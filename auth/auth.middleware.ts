@@ -1,12 +1,15 @@
 // auth/auth.middleware.ts
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { prisma } from '../shared/prisma';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dealflow360-super-secret-key';
 
 export interface AuthUser {
   id: string;
   role: string;
+  email?: string;
+  name?: string;
 }
 
 export interface AuthenticatedRequest extends Request {
@@ -17,7 +20,7 @@ export interface AuthenticatedRequest extends Request {
  * Middleware to authenticate requests using JWT Bearer token.
  * Attached decoded user payload { id, role } to req.user.
  */
-export const authenticate = (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+export const authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -28,7 +31,7 @@ export const authenticate = (req: AuthenticatedRequest, res: Response, next: Nex
   const token = authHeader.split(' ')[1];
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as { userId?: string; id?: string; role: string };
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId?: string; id?: string; role: string; email?: string };
     const userId = decoded.userId || decoded.id;
 
     if (!userId || !decoded.role) {
@@ -36,9 +39,16 @@ export const authenticate = (req: AuthenticatedRequest, res: Response, next: Nex
       return;
     }
 
+    const dbUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, email: true, name: true }
+    }).catch(() => null);
+
     req.user = {
-      id: userId,
-      role: decoded.role
+      id: dbUser ? dbUser.id : userId,
+      role: dbUser ? dbUser.role : decoded.role,
+      email: dbUser?.email || decoded.email || undefined,
+      name: dbUser?.name || undefined
     };
 
     next();

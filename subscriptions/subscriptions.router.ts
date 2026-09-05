@@ -1,7 +1,8 @@
 // subscriptions/subscriptions.router.ts
 import { Router, Request, Response } from 'express';
 import { subscriptionsService } from './subscriptions.service';
-import { authenticate, requireRole } from '../auth/auth.middleware';
+import { authenticate, requireRole, AuthenticatedRequest } from '../auth/auth.middleware';
+import { prisma } from '../shared/prisma';
 
 export const subscriptionsRouter = Router();
 
@@ -127,6 +128,95 @@ subscriptionsRouter.patch('/plans/:id/deactivate', authenticate, requireRole(['A
 // ============================================================================
 // 2. Subscription Lifecycle Endpoints
 // ============================================================================
+
+/**
+ * GET /subscriptions
+ * Lists subscriptions with customer scoping.
+ */
+subscriptionsRouter.get('/', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.user.id || !req.user.role) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    let where: any = {};
+    if (req.user.role === 'CUSTOMER') {
+      const userQuotations = await prisma.quotation.findMany({
+        where: { OR: [{ customerId: req.user.id }, { userId: req.user.id }] },
+        select: { id: true }
+      });
+      const quotationIds = userQuotations.map((q) => q.id);
+      where.quotationId = { in: quotationIds };
+    }
+
+    const subscriptions = await prisma.subscription.findMany({
+      where,
+      include: {
+        plan: true,
+        billingScheduleEntries: {
+          orderBy: { billingDate: 'asc' }
+        },
+        creditNotes: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.status(200).json(subscriptions);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * GET /subscriptions/invoices
+ * Lists customer invoices.
+ */
+subscriptionsRouter.get('/invoices', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.user.id || !req.user.role) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    let quotations;
+    if (req.user.role === 'CUSTOMER') {
+      quotations = await prisma.quotation.findMany({
+        where: { OR: [{ customerId: req.user.id }, { userId: req.user.id }] },
+        orderBy: { createdAt: 'desc' }
+      });
+    } else {
+      quotations = await prisma.quotation.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+
+    const invoices = await Promise.all(
+      quotations.map(async (q) => {
+        try {
+          const inv = await subscriptionsService.getOrderInvoice(q.id);
+          return {
+            id: `INV-${q.quoteNumber || q.id.slice(0, 8)}`,
+            invoiceNumber: `INV-${q.quoteNumber || q.id.slice(0, 8)}`,
+            orderId: q.id,
+            quoteNumber: q.quoteNumber,
+            date: q.createdAt,
+            dueDate: new Date(new Date(q.createdAt).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+            amount: inv.combinedInvoiceTotal || q.totalAmount,
+            status: q.status === 'CONFIRMED' || q.status === 'FULFILLED' ? 'PAID' : 'PENDING',
+            customerName: q.customerName || 'Customer'
+          };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    res.status(200).json(invoices.filter(Boolean));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 /**
  * POST /subscriptions

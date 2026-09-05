@@ -218,13 +218,16 @@ describe('Subscription & Hybrid Billing Module Tests', () => {
 
     it('should create subscription and generate 12 billing schedule entries', async () => {
       const startDate = new Date('2026-01-01T00:00:00.000Z');
-      const res = await request(app).post('/subscriptions').send({
-        quotationId,
-        planId: testPlanId,
-        quantity: 2,
-        startDate: startDate.toISOString(),
-        cyclesToGenerate: 12
-      });
+      const res = await request(app)
+        .post('/subscriptions')
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({
+          quotationId,
+          planId: testPlanId,
+          quantity: 2,
+          startDate: startDate.toISOString(),
+          cyclesToGenerate: 12
+        });
 
       expect(res.status).toBe(201);
       expect(res.body.id).toBeDefined();

@@ -12,6 +12,9 @@ import { approvalsRouter } from '../approvals/approvals.router';
 import { productsRouter } from '../products/products.router';
 import { warehousesRouter } from '../warehouses/warehouses.router';
 import { quotationsRouter } from '../quotations/quotations.router';
+import { adminRouter } from './admin/admin.router';
+import { dashboardsRouter } from './dashboards/dashboards.router';
+import { financeRouter } from '../finance/finance.router';
 
 dotenv.config();
 
@@ -57,6 +60,21 @@ app.use('/backend/warehouses', warehousesRouter);
 app.use('/reports', reportsRouter);
 app.use('/backend/reports', reportsRouter);
 
+// Finance & Billing Module Routes
+app.use('/finance', financeRouter);
+app.use('/backend/finance', financeRouter);
+app.use('/api/finance', financeRouter);
+
+// Admin Analytics & Statistics Routes
+app.use('/admin', adminRouter);
+app.use('/backend/admin', adminRouter);
+app.use('/api/admin', adminRouter);
+
+// Dedicated Role-Based Dashboard Routes
+app.use('/dashboards', dashboardsRouter);
+app.use('/backend/dashboards', dashboardsRouter);
+app.use('/api/dashboards', dashboardsRouter);
+
 // Order / Quotation Invoice Route
 app.get('/orders/:orderId/invoice', orderInvoiceHandler);
 app.get('/backend/orders/:orderId/invoice', orderInvoiceHandler);
@@ -71,7 +89,7 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`[Server] DealFlow360 backend listening on port ${PORT}`);
   });
 }
