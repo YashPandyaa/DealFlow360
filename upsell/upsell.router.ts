@@ -94,7 +94,11 @@ const handleUpdateRule = async (req: Request, res: Response): Promise<void> => {
 
     res.status(200).json(updatedRule);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    if (error.message?.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
   }
 };
 
@@ -115,7 +119,11 @@ upsellRouter.delete(
       await upsellService.deleteRule(id);
       res.status(200).json({ message: 'Upsell rule deleted successfully' });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      if (error.message?.includes('not found')) {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(400).json({ error: error.message });
+      }
     }
   }
 );

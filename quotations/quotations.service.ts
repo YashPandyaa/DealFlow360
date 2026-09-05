@@ -51,10 +51,8 @@ export class QuotationsService {
       data: {
         quoteNumber,
         userId: repId,
-        customerId: input.customerId || null,
-        customerName: input.customerName || null,
+        customerName: input.customerName || (input.customerId ? 'Customer' : null),
         customerTier: input.customerTier ? input.customerTier.toUpperCase() : 'GOLD',
-        currency: input.currency ? input.currency.toUpperCase() : 'USD',
         status: 'DRAFT',
         totalAmount: 0
       },
@@ -97,10 +95,9 @@ export class QuotationsService {
       quoteNumber: q.quoteNumber,
       repId: q.userId,
       repName: q.user?.name || null,
-      customerId: q.customerId,
       customerName: q.customerName || 'Customer',
       customerTier: q.customerTier,
-      currency: q.currency,
+      currency: 'USD',
       amount: q.totalAmount,
       totalAmount: q.totalAmount,
       status: q.status,
@@ -134,7 +131,14 @@ export class QuotationsService {
       throw err;
     }
 
-    return quotation;
+    return {
+      ...quotation,
+      lines: quotation.lines.map((l) => ({
+        ...l,
+        discountPercent: l.discount,
+        lineTotal: l.totalPrice
+      }))
+    };
   }
 
   // ============================================================================
@@ -174,8 +178,7 @@ export class QuotationsService {
 
       const priceResult = await productsService.resolveProductPrice(
         item.productId,
-        quotation.customerTier || undefined,
-        quotation.currency || undefined
+        quotation.customerTier || undefined
       );
 
       const unitPrice = priceResult.resolvedPrice;
@@ -212,9 +215,7 @@ export class QuotationsService {
             quantity: line.quantity,
             unitPrice: line.unitPrice,
             discount: line.discountPercent,
-            discountPercent: line.discountPercent,
-            totalPrice: line.lineTotal,
-            lineTotal: line.lineTotal
+            totalPrice: line.lineTotal
           }
         });
       }

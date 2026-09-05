@@ -115,16 +115,33 @@ warehousesRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { name, code, location, capacity, isActive } = req.body;
+      if (!name || typeof name !== 'string' || !name.trim()) {
+        res.status(400).json({ error: 'Warehouse name is required' });
+        return;
+      }
+      if (!code || typeof code !== 'string' || !code.trim()) {
+        res.status(400).json({ error: 'Warehouse code is required' });
+        return;
+      }
+      if (capacity !== undefined && (isNaN(Number(capacity)) || Number(capacity) < 0)) {
+        res.status(400).json({ error: 'Capacity must be a non-negative number' });
+        return;
+      }
+
       const warehouse = await warehousesService.createWarehouse({
-        name,
-        code,
+        name: name.trim(),
+        code: code.trim(),
         location,
-        capacity,
+        capacity: capacity !== undefined ? Number(capacity) : undefined,
         isActive
       });
       res.status(201).json(warehouse);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      if (error.code === 'P2002' || error.message?.includes('already exists') || error.message?.includes('Unique constraint')) {
+        res.status(409).json({ error: `Warehouse with code '${req.body.code}' already exists` });
+      } else {
+        res.status(400).json({ error: error.message });
+      }
     }
   }
 );
@@ -142,20 +159,29 @@ warehousesRouter.post(
       const warehouseId = getParamString(req.params.id);
       const { productId, quantity } = req.body;
 
-      if (!productId || quantity === undefined) {
-        res.status(400).json({ error: 'productId and quantity are required' });
+      if (!productId || typeof productId !== 'string' || !productId.trim()) {
+        res.status(400).json({ error: 'productId is required' });
+        return;
+      }
+
+      if (quantity === undefined || isNaN(Number(quantity)) || Number(quantity) < 0) {
+        res.status(400).json({ error: 'Valid non-negative quantity is required' });
         return;
       }
 
       const stockRecord = await warehousesService.setStock(
         warehouseId,
-        productId,
+        productId.trim(),
         Number(quantity)
       );
 
       res.status(200).json(stockRecord);
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      if (error.message.includes('not found')) {
+        res.status(404).json({ error: error.message });
+      } else {
+        res.status(400).json({ error: error.message });
+      }
     }
   }
 );

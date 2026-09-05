@@ -31,7 +31,7 @@ quotationsRouter.post('/', authenticate, async (req: AuthenticatedRequest, res: 
       id: quotation.id,
       quoteNumber: quotation.quoteNumber,
       status: quotation.status,
-      customerId: quotation.customerId,
+      customerName: quotation.customerName,
       customerTier: quotation.customerTier,
       totalAmount: quotation.totalAmount
     });
