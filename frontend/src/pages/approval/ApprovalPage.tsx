@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { CheckCircle2, Check, X, ShieldAlert, ArrowLeftRight, Clock, User, AlertCircle, ArrowRight } from 'lucide-react';
+import { useWorkspace } from '../workspace';
+import { useAuth } from '../auth/AuthContext';
+import { apiFetch } from '../../utils/api';
 import './Approval.css';
 
 // --- TYPES ---
@@ -98,73 +101,125 @@ const MOCK_SCENARIOS: Record<string, ApprovalRequest> = {
 const ROLES = ['Sales Rep', 'Manager', 'Finance'];
 
 export const ApprovalPage: React.FC = () => {
-  // Test Controls
-  const [activeScenario, setActiveScenario] = useState<string>('pendingManager');
-  const [impersonatedRole, setImpersonatedRole] = useState<string>('Manager');
+  const { activeQuotationId } = useWorkspace();
+  const { user } = useAuth(); // Assume we get user from useAuth
   
   // State
-  const [data, setData] = useState<ApprovalRequest>(MOCK_SCENARIOS.pendingManager);
+  const [data, setData] = useState<ApprovalRequest | null>(null);
   const [activeAction, setActiveAction] = useState<'REJECT' | 'RETURN' | null>(null);
   const [actionReason, setActionReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  // Switch scenario
+  // Fetch real approval data
+  const fetchApprovalData = async () => {
+    if (!activeQuotationId) {
+      setIsLoading(false);
+      return;
+    }
+    try {
+      setIsLoading(true);
+      const res = await apiFetch(`/approvals/${activeQuotationId}/history`);
+      if (!res.ok) throw new Error('Failed to fetch approval history');
+      const hist = await res.json();
+      
+      if (hist.approvalRequests && hist.approvalRequests.length > 0) {
+        // Use the latest request
+        const latest = hist.approvalRequests[0];
+        
+        // Parse required approvers into a chain
+        const required = latest.requiredApprovers === 'MANAGER_THEN_FINANCE' 
+          ? ['MANAGER', 'FINANCE'] 
+          : ['MANAGER'];
+          
+        let currentStatusFound = false;
+        const chain = required.map((role: string) => {
+          let status: StepStatus = 'APPROVED';
+          if (role === latest.currentStep) {
+             status = latest.status === 'PENDING' ? 'PENDING' : latest.status === 'REJECTED' ? 'REJECTED' : 'APPROVED';
+             currentStatusFound = true;
+          } else if (!currentStatusFound) {
+             status = 'APPROVED';
+          } else {
+             status = 'PENDING';
+          }
+          return { roleRequired: role, status };
+        });
+        
+        setData({
+          id: latest.id,
+          quotationId: activeQuotationId,
+          status: latest.status,
+          isReopened: hist.approvalRequests.length > 1,
+          blendedRiskScore: latest.blendedRiskScore,
+          flaggedLines: [], // backend doesn't seem to return these yet in API_CONTRACT
+          chain,
+          history: (latest.stepRecords || []).map((r: any) => ({
+             id: r.id,
+             actorName: r.approverId, // real name if available
+             actorRole: r.approverRole,
+             action: r.action,
+             reason: r.reason,
+             timestamp: r.createdAt
+          }))
+        });
+      } else {
+        // No approval required
+        setData({
+          id: 'none', quotationId: activeQuotationId, status: 'NOT_REQUIRED', 
+          isReopened: false, blendedRiskScore: 0, flaggedLines: [], chain: [], history: []
+        });
+      }
+    } catch (e: any) {
+      setErrorMsg(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setData(JSON.parse(JSON.stringify(MOCK_SCENARIOS[activeScenario])));
-    setActiveAction(null);
-    setActionReason('');
-  }, [activeScenario]);
+    fetchApprovalData();
+  }, [activeQuotationId]);
 
   // Derived state
-  const currentStepIndex = data.chain.findIndex(s => s.status === 'PENDING');
-  const currentStep = currentStepIndex !== -1 ? data.chain[currentStepIndex] : null;
+  const impersonatedRole = user?.role?.toUpperCase() || 'MANAGER';
+  const currentStepIndex = data?.chain.findIndex(s => s.status === 'PENDING') ?? -1;
+  const currentStep = data && currentStepIndex !== -1 ? data.chain[currentStepIndex] : null;
   const canAct = currentStep && currentStep.roleRequired === impersonatedRole;
 
   // Actions
   const handleAction = async (actionType: 'APPROVE' | 'REJECT' | 'RETURN') => {
+    if (!data || data.status === 'NOT_REQUIRED') return;
     if (actionType !== 'APPROVE' && !actionReason.trim()) return;
 
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    setData(prev => {
-      const next = { ...prev, chain: [...prev.chain], history: [...prev.history] };
-      
-      const newHistoryEntry: ApprovalHistoryAction = {
-        id: crypto.randomUUID(),
-        actorName: `Test ${impersonatedRole}`,
-        actorRole: impersonatedRole,
+    try {
+      const payload = {
         action: actionType === 'APPROVE' ? 'APPROVED' : actionType === 'REJECT' ? 'REJECTED' : 'RETURNED_FOR_REVISION',
-        reason: actionReason,
-        timestamp: new Date().toISOString()
+        reason: actionReason
       };
       
-      next.history.unshift(newHistoryEntry); // Prepend to history
-
-      if (currentStepIndex !== -1) {
-        if (actionType === 'APPROVE') {
-          next.chain[currentStepIndex].status = 'APPROVED';
-          // Check if it was the last step
-          if (currentStepIndex === next.chain.length - 1) {
-            next.status = 'APPROVED';
-          }
-        } else if (actionType === 'REJECT') {
-          next.chain[currentStepIndex].status = 'REJECTED';
-          next.status = 'REJECTED';
-        } else if (actionType === 'RETURN') {
-          next.chain[currentStepIndex].status = 'REJECTED'; // Mark current as rejected/returned
-          next.status = 'REVISION_NEEDED';
-        }
+      const res = await apiFetch(`/approvals/${data.id}/action`, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to submit action');
       }
-
-      return next;
-    });
-
-    setIsSubmitting(false);
-    setActiveAction(null);
-    setActionReason('');
+      
+      await fetchApprovalData();
+      setActiveAction(null);
+      setActionReason('');
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+
 
   // Render Helpers
   const renderIcon = (action: ActionType) => {
@@ -176,17 +231,11 @@ export const ApprovalPage: React.FC = () => {
     }
   };
 
+  if (isLoading) return <div className="page-container">Loading approval data...</div>;
+  if (errorMsg || !data) return <div className="page-container" style={{color:'red'}}>{errorMsg || 'No quotation selected'}</div>;
   if (data.status === 'NOT_REQUIRED') {
     return (
       <div className="page-container appr-container">
-        <div className="appr-test-controls">
-          <div className="appr-test-group">
-            <strong>Scenario:</strong>
-            <select className="appr-select" value={activeScenario} onChange={e => setActiveScenario(e.target.value)}>
-              {Object.keys(MOCK_SCENARIOS).map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </div>
-        </div>
         <div className="appr-card" style={{ padding: '40px', textAlign: 'center' }}>
           <CheckCircle2 size={48} color="#10b981" style={{ margin: '0 auto 16px' }} />
           <h2>No Approval Required</h2>
@@ -199,21 +248,6 @@ export const ApprovalPage: React.FC = () => {
 
   return (
     <div className="page-container appr-container">
-      {/* Test Controls */}
-      <div className="appr-test-controls">
-        <div className="appr-test-group">
-          <strong>Scenario:</strong>
-          <select className="appr-select" value={activeScenario} onChange={e => setActiveScenario(e.target.value)}>
-            {Object.keys(MOCK_SCENARIOS).map(k => <option key={k} value={k}>{k}</option>)}
-          </select>
-        </div>
-        <div className="appr-test-group">
-          <strong>Impersonate Role:</strong>
-          <select className="appr-select" value={impersonatedRole} onChange={e => setImpersonatedRole(e.target.value)}>
-            {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-      </div>
 
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>

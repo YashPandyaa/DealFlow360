@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Lock, LogIn, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { apiFetch } from '../../utils/api';
 import './Auth.css';
 
 export const AuthPage: React.FC = () => {
@@ -45,37 +46,36 @@ export const AuthPage: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // Simulate Backend Dev A's POST /auth/login or POST /auth/signup
-      await new Promise(resolve => setTimeout(resolve, 800));
-
       if (mode === 'LOGIN') {
-        // Generic error on login failure if they type "wrong" (just for testing generic error)
-        if (password === 'wrongpass' || email === 'fail@dealflow.co') {
-          throw new Error('Invalid credentials');
-        }
-
-        // Mock success
-        const mockToken = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock_${Date.now()}`;
-        const mockUser = {
-          id: 'usr_' + Date.now(),
-          name: email.split('@')[0],
-          email: email,
-          role: 'Manager', // Hardcoded default for login test
-        };
+        const response = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password })
+        });
         
-        login(mockToken, mockUser);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Invalid credentials');
+        }
+        
+        login(data.token, data.user);
         navigate('/workspace');
       } else {
-        // Signup logic
-        const mockToken = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.mock_${Date.now()}`;
-        const mockUser = {
-          id: 'usr_' + Date.now(),
-          name: email.split('@')[0],
-          email: email,
-          role: role,
-        };
+        const response = await apiFetch('/auth/signup', {
+          method: 'POST',
+          body: JSON.stringify({ email, password, name: email.split('@')[0], role })
+        });
         
-        login(mockToken, mockUser);
+        const data = await response.json();
+        if (!response.ok) {
+          // If backend returns a field-level error object (like Zod)
+          if (data.error && typeof data.error === 'object' && !Array.isArray(data.error)) {
+             setFieldErrors(data.error);
+             return; // Stop here, don't set global error
+          }
+          throw new Error(data.error || 'Signup failed');
+        }
+        
+        login(data.token, data.user);
         navigate('/workspace');
       }
     } catch (err: any) {

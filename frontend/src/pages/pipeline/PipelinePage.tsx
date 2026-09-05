@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../utils/api';
 import { GitPullRequest, ListFilter, LayoutGrid, ArrowRight, CheckCircle, Plus } from 'lucide-react';
 import { useWorkspace } from '../workspace';
 
@@ -12,12 +13,7 @@ interface MockDeal {
   updatedAt: string;
 }
 
-const INITIAL_DEALS: MockDeal[] = [
-  { id: 'Q-2026-001', quoteNumber: 'Q-8492', client: 'Acme Global Corp', amount: '$148,000', stage: 'Draft', updatedAt: '10 mins ago' },
-  { id: 'Q-2026-002', quoteNumber: 'Q-8493', client: 'Apex CyberTech', amount: '$74,500', stage: 'Internal Review', updatedAt: '25 mins ago' },
-  { id: 'Q-2026-003', quoteNumber: 'Q-8494', client: 'Starlight Financial', amount: '$320,000', stage: 'Approved', updatedAt: '1 hour ago' },
-  { id: 'Q-2026-004', quoteNumber: 'Q-8495', client: 'Nexus Retail Group', amount: '$92,000', stage: 'Customer Review', updatedAt: '2 hours ago' },
-];
+
 
 export const PipelinePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -26,13 +22,46 @@ export const PipelinePage: React.FC = () => {
   const [scenario, setScenario] = useState<'DEFAULT' | 'EMPTY'>('DEFAULT');
   const [reloadNotice, setReloadNotice] = useState<string | null>(null);
 
-  const deals = scenario === 'EMPTY' ? [] : INITIAL_DEALS;
+  const [deals, setDeals] = useState<MockDeal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const isListView = searchParams.get('view') === 'list';
 
-  // Register reload listener to refresh mock data on top-nav Reload Data click
+  const fetchQuotations = async () => {
+    try {
+      setIsLoading(true);
+      const res = await apiFetch('/quotations');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Map backend shape to MockDeal shape for the UI
+      const mappedDeals = data.map((q: any) => ({
+        id: q.id,
+        quoteNumber: q.quoteNumber,
+        client: q.customerName,
+        amount: new Intl.NumberFormat('en-US', { style: 'currency', currency: q.currency || 'USD' }).format(q.totalAmount || 0),
+        stage: q.status === 'DRAFT' ? 'Draft' :
+               q.status === 'PENDING_APPROVAL' ? 'Internal Review' :
+               q.status === 'APPROVED' ? 'Approved' : 'Customer Review', // basic mapping
+        updatedAt: new Date(q.updatedAt).toLocaleTimeString(),
+      }));
+
+      setDeals(mappedDeals);
+    } catch (err) {
+      console.error('Failed to load pipeline:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuotations();
+  }, []);
+
+  // Register reload listener to refresh data on top-nav Reload Data click
   useEffect(() => {
     const unregister = registerReloadListener(() => {
+      fetchQuotations();
       setReloadNotice(`Data synced at ${new Date().toLocaleTimeString()}`);
       setTimeout(() => setReloadNotice(null), 3000);
     });
@@ -48,9 +77,27 @@ export const PipelinePage: React.FC = () => {
     navigate(`/quotation-builder/${quoteId}`);
   };
 
-  const handleNewQuotation = () => {
-    setActiveQuotationId(null);
-    navigate('/quotation-builder');
+  const handleNewQuotation = async () => {
+    try {
+      // Create via API
+      const res = await apiFetch('/quotations', {
+        method: 'POST',
+        body: JSON.stringify({
+          customerId: '64e99e69-86c9-44f5-8c40-f3458e9facf2', // Hardcoded Acme Procure customer for test
+          customerName: 'Acme Procurement',
+          customerTier: 'GOLD',
+          currency: 'USD'
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      setActiveQuotationId(data.quotationId);
+      navigate(`/quotation-builder/${data.quotationId}`);
+    } catch (err) {
+      console.error('Failed to create quotation:', err);
+      alert('Error creating quotation. See console.');
+    }
   };
 
   return (

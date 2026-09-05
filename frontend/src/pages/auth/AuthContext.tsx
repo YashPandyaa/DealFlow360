@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { setUnauthorizedCallback } from '../../utils/api';
 
 export interface AuthUser {
   id: string;
@@ -49,7 +50,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     
     setIsLoading(false);
-  }, []);
+    
+    // Register the API 401 interceptor
+    setUnauthorizedCallback(() => {
+      // Clear storage manually because logout() relies on context state
+      localStorage.removeItem('dealflow_token');
+      localStorage.removeItem('dealflow_user');
+      setToken(null);
+      setUser(null);
+      // We can't guarantee `navigate` works identically inside an async fetch without router context
+      // but since AuthContext is inside BrowserRouter, it should work fine here.
+      navigate('/auth');
+    });
+  }, [navigate]);
 
   const login = (newToken: string, newUser: AuthUser) => {
     localStorage.setItem('dealflow_token', newToken);

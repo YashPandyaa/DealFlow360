@@ -3,34 +3,23 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { FileSpreadsheet, Trash2, Search, AlertCircle } from 'lucide-react';
 import { useWorkspace } from '../workspace';
 import UpsellPanel from '../../components/UpsellPanel/UpsellPanel';
+import { apiFetch } from '../../utils/api';
 import './QuotationBuilder.css';
 
-// --- TYPES ---
 export interface Product {
   id: string;
   name: string;
-  category: 'Hardware' | 'Services' | 'Subscriptions';
-  price: number;
-  cost: number;
+  category: string;
+  basePrice: number;
+  marginPercent: number;
 }
 
 export interface CartLine {
-  lineId: string;
+  productId: string;
   product: Product;
   quantity: number;
   discountPercent: number;
 }
-
-// --- MOCK DATA ---
-const MOCK_PRODUCTS: Product[] = [
-  { id: 'hw-1', name: 'Enterprise Router X1', category: 'Hardware', price: 1200, cost: 800 },
-  { id: 'hw-2', name: 'Switch 48-Port', category: 'Hardware', price: 2500, cost: 1800 },
-  { id: 'hw-3', name: 'Wifi 6 Access Point', category: 'Hardware', price: 450, cost: 250 },
-  { id: 'svc-1', name: 'On-site Installation', category: 'Services', price: 500, cost: 300 },
-  { id: 'svc-2', name: 'Network Audit', category: 'Services', price: 1500, cost: 900 },
-  { id: 'sub-1', name: 'Cloud Management (1Yr)', category: 'Subscriptions', price: 120, cost: 40 },
-  { id: 'sub-2', name: 'Advanced Threat Protection', category: 'Subscriptions', price: 300, cost: 100 },
-];
 
 export const QuotationBuilderPage: React.FC = () => {
   const { id } = useParams<{ id?: string }>();
@@ -69,22 +58,18 @@ export const QuotationBuilderPage: React.FC = () => {
     return unregister;
   }, [registerReloadListener]);
 
-  // Fetch Products (Mocked)
+  // Fetch Products
   useEffect(() => {
     let isMounted = true;
     const fetchProducts = async () => {
       setProductsLoading(true);
       setProductsError(null);
       try {
-        // Simulate network delay
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        // --- SIMULATED ERROR STATE FOR TESTING ---
-        // Uncomment to test error state:
-        // throw new Error("Failed to connect to product catalog API.");
-        
+        const res = await apiFetch('/products');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
         if (isMounted) {
-          setProducts(MOCK_PRODUCTS);
+          setProducts(data);
         }
       } catch (err: any) {
         if (isMounted) {
@@ -96,30 +81,53 @@ export const QuotationBuilderPage: React.FC = () => {
     };
     
     fetchProducts();
-    
     return () => { isMounted = false; };
   }, []);
+
+  // Fetch Cart Lines for current quotation
+  const fetchQuotationLines = async () => {
+    if (!currentId) return;
+    try {
+      const res = await apiFetch(`/quotations/${currentId}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lines) {
+          setCartLines(data.lines.map((l: any) => ({
+            productId: l.productId,
+            product: l.product ? { ...l.product, id: l.productId, basePrice: l.unitPrice, marginPercent: 30 /* mocked margin for received line */ } : { id: l.productId, name: 'Unknown', category: 'Unknown', basePrice: l.unitPrice, marginPercent: 0 },
+            quantity: l.quantity,
+            discountPercent: l.discountPercent || 0
+          })));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load quotation lines', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchQuotationLines();
+  }, [currentId]);
 
   // --- ACTIONS ---
   const handleAddToCart = (product: Product) => {
     setCartLines(prev => {
-      const existing = prev.find(line => line.product.id === product.id);
+      const existing = prev.find(line => line.productId === product.id);
       if (existing) {
         return prev.map(line => 
-          line.product.id === product.id 
+          line.productId === product.id 
             ? { ...line, quantity: line.quantity + 1 }
             : line
         );
       }
-      return [...prev, { lineId: crypto.randomUUID(), product, quantity: 1, discountPercent: 0 }];
+      return [...prev, { productId: product.id, product, quantity: 1, discountPercent: 0 }];
     });
   };
 
-  const handleUpdateLine = (lineId: string, field: 'quantity' | 'discountPercent', value: number) => {
+  const handleUpdateLine = (productId: string, field: 'quantity' | 'discountPercent', value: number) => {
     setCartLines(prev => prev.map(line => {
-      if (line.lineId === lineId) {
+      if (line.productId === productId) {
         let cleanVal = value;
-        // Clamp logic
         if (field === 'discountPercent') {
           cleanVal = Math.max(0, Math.min(100, value || 0));
         } else if (field === 'quantity') {
@@ -131,8 +139,37 @@ export const QuotationBuilderPage: React.FC = () => {
     }));
   };
 
-  const handleRemoveLine = (lineId: string) => {
-    setCartLines(prev => prev.filter(line => line.lineId !== lineId));
+  const handleRemoveLine = (productId: string) => {
+    setCartLines(prev => prev.filter(line => line.productId !== productId));
+  };
+
+  const handleSaveLines = async () => {
+    if (!currentId) return;
+    setIsSubmitting(true);
+    try {
+      const payload = {
+        lines: cartLines.map(l => ({
+          productId: l.productId,
+          quantity: l.quantity,
+          discountPercent: l.discountPercent
+        }))
+      };
+      const res = await apiFetch(`/quotations/${currentId}/lines`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setSyncedNotice('Saved successfully!');
+      setTimeout(() => setSyncedNotice(null), 3000);
+      await fetchQuotationLines(); // reload from backend to get verified pricing
+    } catch (e: any) {
+      console.error(e);
+      alert('Failed to save lines: ' + e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleOrderDiscountChange = (val: number) => {
@@ -140,23 +177,31 @@ export const QuotationBuilderPage: React.FC = () => {
   };
 
   const handleConfirm = async () => {
+    if (!currentId) return;
     setIsSubmitting(true);
     try {
-      // Mock submit
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 1. Ensure lines are saved
+      await handleSaveLines();
       
-      // Determine branching logically based on backend rules (simulated here)
-      // e.g. If margin is < 20% or order discount > 15%, requires approval
-      const requiresApproval = marginPercentage < 20 || orderDiscountPercent > 15;
+      // 2. Submit for approval/fulfillment
+      const res = await apiFetch(`/approvals/submit`, {
+        method: 'POST',
+        body: JSON.stringify({
+          quotationId: currentId,
+          customerTier: 'GOLD' // We hardcoded this on creation
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
       
-      if (requiresApproval) {
+      if (data.status === 'PENDING_APPROVAL' || data.quotation?.status === 'PENDING_APPROVAL') {
         navigate('/approval');
       } else {
-        // Assume fulfillment handles active order
         navigate('/fulfillment');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      alert('Failed to submit quotation: ' + e.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -168,10 +213,12 @@ export const QuotationBuilderPage: React.FC = () => {
     let cost = 0;
     
     cartLines.forEach(line => {
-      const lineBasePrice = line.product.price * line.quantity;
+      const lineBasePrice = line.product.basePrice * line.quantity;
       const lineFinalPrice = lineBasePrice * (1 - (line.discountPercent / 100));
       sub += lineFinalPrice;
-      cost += (line.product.cost * line.quantity);
+      
+      const pCost = line.product.basePrice * (1 - (line.product.marginPercent / 100));
+      cost += (pCost * line.quantity);
     });
 
     const total = sub * (1 - (orderDiscountPercent / 100));
@@ -279,7 +326,7 @@ export const QuotationBuilderPage: React.FC = () => {
                   <div key={p.id} className="qb-product-card">
                     <div>
                       <h4 className="qb-product-name">{p.name}</h4>
-                      <div className="qb-product-price">${p.price.toFixed(2)}</div>
+                      <div className="qb-product-price">${p.basePrice.toFixed(2)}</div>
                       <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '4px' }}>{p.category}</div>
                     </div>
                     <button 
@@ -315,16 +362,16 @@ export const QuotationBuilderPage: React.FC = () => {
                 </thead>
                 <tbody>
                   {cartLines.map(line => {
-                    const lineTotal = (line.product.price * line.quantity) * (1 - (line.discountPercent / 100));
+                    const lineTotal = (line.product.basePrice * line.quantity) * (1 - (line.discountPercent / 100));
                     return (
-                      <tr key={line.lineId}>
+                      <tr key={line.productId}>
                         <td style={{ fontWeight: 500 }}>{line.product.name}</td>
-                        <td>${line.product.price.toFixed(2)}</td>
+                        <td>${line.product.basePrice.toFixed(2)}</td>
                         <td>
                           <div className="qb-qty-controls">
-                            <button type="button" className="qb-qty-btn" onClick={() => handleUpdateLine(line.lineId, 'quantity', line.quantity - 1)}>-</button>
+                            <button type="button" className="qb-qty-btn" onClick={() => handleUpdateLine(line.productId, 'quantity', line.quantity - 1)}>-</button>
                             <span style={{ width: '20px', textAlign: 'center' }}>{line.quantity}</span>
-                            <button type="button" className="qb-qty-btn" onClick={() => handleUpdateLine(line.lineId, 'quantity', line.quantity + 1)}>+</button>
+                            <button type="button" className="qb-qty-btn" onClick={() => handleUpdateLine(line.productId, 'quantity', line.quantity + 1)}>+</button>
                           </div>
                         </td>
                         <td>
@@ -332,7 +379,7 @@ export const QuotationBuilderPage: React.FC = () => {
                             type="number" 
                             className="qb-discount-input"
                             value={line.discountPercent}
-                            onChange={(e) => handleUpdateLine(line.lineId, 'discountPercent', parseFloat(e.target.value) || 0)}
+                            onChange={(e) => handleUpdateLine(line.productId, 'discountPercent', parseFloat(e.target.value) || 0)}
                             min={0}
                             max={100}
                           />
@@ -344,7 +391,7 @@ export const QuotationBuilderPage: React.FC = () => {
                           <button 
                             type="button" 
                             style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}
-                            onClick={() => handleRemoveLine(line.lineId)}
+                            onClick={() => handleRemoveLine(line.productId)}
                           >
                             <Trash2 size={16} />
                           </button>
@@ -394,6 +441,15 @@ export const QuotationBuilderPage: React.FC = () => {
                 <button 
                   type="button" 
                   className="qb-confirm-btn"
+                  onClick={handleSaveLines}
+                  style={{ marginBottom: '8px', background: '#fff', color: '#111827', border: '1px solid #d1d5db' }}
+                  disabled={cartLines.length === 0 || isSubmitting}
+                >
+                  {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+                <button 
+                  type="button" 
+                  className="qb-confirm-btn"
                   onClick={handleConfirm}
                   disabled={cartLines.length === 0 || isSubmitting}
                 >
@@ -411,7 +467,7 @@ export const QuotationBuilderPage: React.FC = () => {
             quotationId={currentId || 'draft'}
             onAdd={(productId) => {
               // Find full product details in mock to add to cart
-              const product = MOCK_PRODUCTS.find(p => p.id === productId);
+              const product = products.find(p => p.id === productId);
               if (product) {
                 handleAddToCart(product);
               }
