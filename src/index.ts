@@ -3,6 +3,9 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
+import { authRouter } from '../auth/auth.router';
+import { subscriptionsRouter, orderInvoiceHandler } from '../subscriptions/subscriptions.router';
+
 dotenv.config();
 
 const app = express();
@@ -10,6 +13,19 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Auth Module Routes
+app.use('/auth', authRouter);
+app.use('/backend/auth', authRouter);
+
+// Subscription Module Routes
+app.use('/subscriptions', subscriptionsRouter);
+app.use('/backend/subscriptions', subscriptionsRouter);
+
+// Order / Quotation Invoice Route
+app.get('/orders/:orderId/invoice', orderInvoiceHandler);
+app.get('/backend/orders/:orderId/invoice', orderInvoiceHandler);
+
 
 // Health Check Route
 app.get('/health', (req: Request, res: Response) => {

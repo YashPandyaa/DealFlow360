@@ -10,16 +10,30 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String?
-  role      String   @default("USER")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String?
+  name         String?
+  role         String   @default("REP")
+  isPortalUser Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  quotations Quotation[]
-  auditLogs  AuditLog[]
+  quotations       Quotation[]
+  auditLogs        AuditLog[]
+  portalMagicLinks PortalMagicLink[]
 }
+
+model PortalMagicLink {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
 
 model Product {
   id          String   @id @default(uuid())
@@ -138,35 +152,56 @@ model StockAllocation {
 }
 
 model SubscriptionPlan {
-  id               String            @id @default(uuid())
-  name             String
-  code             String?           @unique
-  description      String?
-  billingFrequency String            @default("MONTHLY") // MONTHLY, QUARTERLY, ANNUALLY
-  price            Float
-  currency         String            @default("USD")
-  isActive         Boolean           @default(true)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id            String         @id @default(uuid())
+  name          String
+  billingCycle  String         @default("MONTHLY") // enum: MONTHLY, QUARTERLY, YEARLY
+  productId     String?        // Foreign key to Product
+  pricePerCycle Float
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  billingSchedules BillingSchedule[]
+  subscriptions Subscription[]
 }
 
-model BillingSchedule {
-  id                 String           @id @default(uuid())
-  subscriptionPlanId String
-  subscriptionPlan   SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id], onDelete: Cascade)
-  quotationId        String?          // Foreign key to Quotation
-  userId             String?          // Foreign key to User
+model Subscription {
+  id                 String                 @id @default(uuid())
+  quotationId        String?                // Foreign key to Quotation
+  planId             String
+  plan               SubscriptionPlan       @relation(fields: [planId], references: [id], onDelete: Cascade)
+  quantity           Int                    @default(1)
   startDate          DateTime
-  nextBillingDate    DateTime
-  endDate            DateTime?
-  status             String           @default("ACTIVE") // ACTIVE, PAUSED, CANCELLED
-  amount             Float
-  currency           String           @default("USD")
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  status             String                 @default("ACTIVE") // enum: ACTIVE, CANCELLED, PAST_DUE
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  billingScheduleEntries BillingScheduleEntry[]
+  creditNotes            CreditNote[]
 }
+
+model BillingScheduleEntry {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  billingDate    DateTime
+  amount         Float
+  status         String       @default("UPCOMING") // enum: UPCOMING, INVOICED, PAID
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model CreditNote {
+  id             String       @id @default(uuid())
+  subscriptionId String
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  amount         Float
+  reason         String
+  createdAt      DateTime     @default(now())
+}
+
 
 model UpsellRule {
   id                  String   @id @default(uuid())
