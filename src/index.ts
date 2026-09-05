@@ -8,6 +8,7 @@ import { subscriptionsRouter, orderInvoiceHandler } from '../subscriptions/subsc
 import { discountsRouter } from '../discounts/discounts.router';
 import { upsellRouter } from '../upsell/upsell.router';
 import { reportsRouter } from '../reports/reports.router';
+import { approvalsRouter } from '../approvals/approvals.router';
 
 dotenv.config();
 
@@ -33,6 +34,10 @@ app.use('/backend/discounts', discountsRouter);
 app.use('/upsell', upsellRouter);
 app.use('/backend/upsell', upsellRouter);
 
+// Approval Engine Module Routes
+app.use('/approvals', approvalsRouter);
+app.use('/backend/approvals', approvalsRouter);
+
 // Reporting & Deal Health Analytics Module Routes
 app.use('/reports', reportsRouter);
 app.use('/backend/reports', reportsRouter);
@@ -40,9 +45,6 @@ app.use('/backend/reports', reportsRouter);
 // Order / Quotation Invoice Route
 app.get('/orders/:orderId/invoice', orderInvoiceHandler);
 app.get('/backend/orders/:orderId/invoice', orderInvoiceHandler);
-
-
-
 
 // Health Check Route
 app.get('/health', (req: Request, res: Response) => {
