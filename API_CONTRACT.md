@@ -970,6 +970,355 @@ Triggers an escalation nudge action for a stalled deal or anomaly by logging an 
   }
   ```
 
+---
+
+## Product Catalog Endpoints (`/products`, `/backend/products`)
+
+### 1. List Products (With Category & Search Filters)
+**`GET /products`**
+
+Lists products with optional category filtering and search string matching against name, SKU, or description.
+
+- **Query Parameters**:
+  - `category` (String, optional): Filter by exact category (e.g. `Hardware`, `Services`, `Subscriptions`).
+  - `search` (String, optional): Case-insensitive string search against product name, SKU, or description (e.g. `laptop`).
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "id": "prod-uuid-1",
+      "sku": "HW-WKS-01",
+      "name": "Pro Workstation Laptop",
+      "description": "Mobile workstation with dedicated GPU",
+      "category": "Hardware",
+      "basePrice": 1500.00,
+      "unit": "PCS",
+      "tax": 10.0,
+      "marginPercent": 25.0,
+      "currency": "USD",
+      "variants": [
+        {
+          "id": "variant-uuid-1",
+          "attribute": "Storage",
+          "value": "1TB SSD",
+          "extraPrice": 150.00
+        }
+      ],
+      "priceLists": []
+    }
+  ]
+  ```
+
+---
+
+### 2. Create Product (With Optional Nested Variants)
+**`POST /products`** *(Admin Only)*
+
+Creates a new product in the catalog with optional nested variants.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "sku": "HW-SRV-01",
+    "name": "Enterprise Rack Server",
+    "description": "Dual-socket 2U rack server",
+    "category": "Hardware",
+    "basePrice": 2500.00,
+    "unit": "PCS",
+    "tax": 10.0,
+    "marginPercent": 30.0,
+    "currency": "USD",
+    "variants": [
+      {
+        "attribute": "RAM",
+        "value": "64GB",
+        "extraPrice": 200.00
+      }
+    ]
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "prod-uuid-2",
+    "sku": "HW-SRV-01",
+    "name": "Enterprise Rack Server",
+    "category": "Hardware",
+    "basePrice": 2500.00,
+    "marginPercent": 30.0,
+    "variants": []
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: `basePrice` or `marginPercent` is negative.
+  - `403 Forbidden`: User is not an Admin.
+
+---
+
+### 3. Product Price Resolution
+**`GET /products/:id/price?customerTier=GOLD&currency=USD`**
+
+Resolves final tier-aware price and currency conversion for a product. Looks up `PriceList` for tier+currency overrides; falls back to FX rate converted base price.
+
+- **Query Parameters**:
+  - `customerTier` (String, optional): `BRONZE`, `SILVER`, `GOLD`
+  - `currency` (String, optional): Target currency (e.g. `USD`, `EUR`, `GBP`, `CAD`, `INR`)
+
+- **Response `200 OK` (Override Matched)**:
+  ```json
+  {
+    "productId": "prod-uuid-1",
+    "productName": "Enterprise Rack Server",
+    "customerTier": "GOLD",
+    "currency": "USD",
+    "basePrice": 2500.00,
+    "overridePrice": 2200.00,
+    "resolvedPrice": 2200.00,
+    "currencyConverted": false
+  }
+  ```
+
+- **Response `200 OK` (FX Converted)**:
+  ```json
+  {
+    "productId": "prod-uuid-1",
+    "productName": "Enterprise Rack Server",
+    "customerTier": "SILVER",
+    "currency": "EUR",
+    "basePrice": 2500.00,
+    "overridePrice": null,
+    "resolvedPrice": 2300.00,
+    "currencyConverted": true
+  }
+  ```
+
+---
+
+### 4. Delete Product
+**`DELETE /products/:id`** *(Admin Only)*
+
+Deletes a product from the catalog. Blocks deletion with `409 Conflict` if the product is referenced in existing quotations or price lists.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`
+
+- **Error Response `409 Conflict`**:
+  ```json
+  { "error": "Cannot delete product 'prod-uuid-1' because it is referenced in existing quotations or price lists" }
+  ```
+
+---
+
+## Warehouses & Multi-Location Fulfillment Endpoints (`/warehouses`)
+
+### 1. List Warehouses with Stock Inventory
+**`GET /warehouses`**
+
+Returns all active warehouses with inventory stock records.
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "id": "wh-uuid-1",
+      "name": "East Coast DC",
+      "code": "WH-EAST",
+      "location": "Newark, NJ",
+      "capacity": 10000,
+      "isActive": true,
+      "stockItems": [
+        {
+          "id": "stock-uuid-1",
+          "productId": "prod-uuid-1",
+          "quantity": 3,
+          "allocatedQty": 0,
+          "product": {
+            "id": "prod-uuid-1",
+            "sku": "HW-SENSOR-IOT",
+            "name": "Telemetry Sensor Pack"
+          }
+        }
+      ]
+    }
+  ]
+  ```
+
+---
+
+### 2. Update Stock Inventory
+**`POST /warehouses/:id/stock`** *(Admin Only)*
+
+Sets the on-hand quantity for a product in a warehouse.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "productId": "prod-uuid-1",
+    "quantity": 15
+  }
+  ```
+- **Response `200 OK`**:
+  ```json
+  {
+    "id": "stock-uuid-1",
+    "warehouseId": "wh-uuid-1",
+    "productId": "prod-uuid-1",
+    "quantity": 15,
+    "allocatedQty": 0
+  }
+  ```
+
+---
+
+### 3. Preview Fulfillment Split
+**`GET /warehouses/suggest-split/:quotationId`**
+
+Simulates fulfillment split allocation across warehouses without reserving stock.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotation": { "id": "quote-uuid-1", "quoteNumber": "Q-2026-001" },
+    "suggestions": [
+      {
+        "productId": "prod-uuid-1",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseId": "wh-uuid-1",
+        "warehouseName": "East Coast DC",
+        "warehouseCode": "WH-EAST",
+        "quantity": 3,
+        "status": "ALLOCATED"
+      },
+      {
+        "productId": "prod-uuid-1",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseId": "wh-uuid-2",
+        "warehouseName": "West Coast DC",
+        "warehouseCode": "WH-WEST",
+        "quantity": 4,
+        "status": "ALLOCATED"
+      },
+      {
+        "productId": "prod-uuid-1",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseId": null,
+        "warehouseName": "Backorder Center",
+        "warehouseCode": "BACKORDER",
+        "quantity": 3,
+        "status": "BACKORDERED"
+      }
+    ],
+    "fullyAllocated": false,
+    "totalRequested": 10,
+    "totalAllocated": 7,
+    "totalBackordered": 3
+  }
+  ```
+
+---
+
+### 4. Execute Fulfillment Split
+**`POST /warehouses/fulfill/:quotationId`**
+
+Executes fulfillment: generates `StockAllocation` records, increments `allocatedQty` on `WarehouseStock`, and updates Quotation status (`ALLOCATED` or `PARTIALLY_ALLOCATED`).
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotationId": "quote-uuid-1",
+    "quoteNumber": "Q-2026-001",
+    "status": "PARTIALLY_ALLOCATED",
+    "fulfillmentSummary": {
+      "fullyAllocated": false,
+      "totalItemsRequested": 10,
+      "allocatedItems": 7,
+      "backorderedItems": 3
+    },
+    "allocations": [
+      {
+        "id": "alloc-uuid-1",
+        "quotationId": "quote-uuid-1",
+        "warehouseId": "wh-uuid-1",
+        "productId": "prod-uuid-1",
+        "quantity": 3,
+        "status": "ALLOCATED",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseName": "East Coast DC",
+        "warehouseCode": "WH-EAST"
+      }
+    ]
+  }
+  ```
+
+---
+
+## Unified Order Invoicing Endpoints (`/orders/:orderId/invoice`)
+
+### 1. Hybrid Order / Quotation Combined Invoice
+**`GET /orders/:orderId/invoice`** (or `GET /subscriptions/orders/:orderId/invoice`)
+
+Generates a unified invoice aggregating both one-time quotation line items and recurring subscription schedules without requiring client-side calculation.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "orderId": "quote-uuid-1",
+    "quoteNumber": "Q-2026-001",
+    "oneTimeTotal": 4100.00,
+    "recurringTotal": 250.00,
+    "combinedInvoiceTotal": 4350.00,
+    "quotationLines": [
+      {
+        "id": "line-uuid-1",
+        "productId": "prod-uuid-1",
+        "productName": "Enterprise App Server",
+        "quantity": 1,
+        "unitPrice": 4000.00,
+        "discount": 20.0,
+        "totalPrice": 3200.00
+      }
+    ],
+    "subscriptions": [
+      {
+        "id": "sub-uuid-1",
+        "planName": "Enterprise Cloud Fleet License",
+        "billingCycle": "MONTHLY",
+        "pricePerCycle": 250.00,
+        "quantity": 1,
+        "cycleTotal": 250.00,
+        "status": "ACTIVE"
+      }
+    ],
+    "upcomingSchedule": [
+      {
+        "id": "sched-uuid-1",
+        "planName": "Enterprise Cloud Fleet License",
+        "billingDate": "2026-10-05T00:00:00.000Z",
+        "amount": 250.00,
+        "status": "UPCOMING"
+      }
+    ],
+    "creditNotes": []
+  }
+  ```
+
+---
+
+## Inter-Module Workflow & Wiring Agreement
+
+1. **Wire Approval $\rightarrow$ Fulfillment**:
+   - Frontend or automated pipeline triggers `POST /warehouses/fulfill/:quotationId` upon `APPROVED` quotation status.
+   - The engine automatically resolves stock across all warehouses, reserves inventory, and tracks backorders.
+2. **Wire Fulfillment $\rightarrow$ Billing**:
+   - Frontend or customer portal requests `GET /orders/:orderId/invoice` once an order is placed/fulfilled.
+   - Subscriptions and hardware line items are automatically partitioned into one-time vs recurring charges.
+
+
+
 
 
 
