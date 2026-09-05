@@ -5,6 +5,7 @@ import dotenv from 'dotenv';
 
 import { authRouter } from '../auth/auth.router';
 import { subscriptionsRouter, orderInvoiceHandler } from '../subscriptions/subscriptions.router';
+import { discountsRouter } from '../discounts/discounts.router';
 
 dotenv.config();
 
@@ -21,6 +22,10 @@ app.use('/backend/auth', authRouter);
 // Subscription Module Routes
 app.use('/subscriptions', subscriptionsRouter);
 app.use('/backend/subscriptions', subscriptionsRouter);
+
+// Discount Governance Module Routes
+app.use('/discounts', discountsRouter);
+app.use('/backend/discounts', discountsRouter);
 
 // Order / Quotation Invoice Route
 app.get('/orders/:orderId/invoice', orderInvoiceHandler);

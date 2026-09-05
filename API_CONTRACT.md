@@ -404,3 +404,172 @@ Aggregates one-time `QuotationLines` and recurring `Subscriptions`. One-time and
   }
   ```
 
+---
+
+## Discount Governance Endpoints (`/discounts`, `/backend/discounts`)
+
+### 1. Discount Tier CRUD
+**`POST /discounts/tiers`** *(Admin Only)*
+
+Creates a customer discount tier setting maximum discount percentage allowed for that tier.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerTier": "GOLD",
+    "maxDiscountPercent": 15.0
+  }
+  ```
+  *Allowed `customerTier` values*: `BRONZE`, `SILVER`, `GOLD`
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "tier-uuid-123",
+    "customerTier": "GOLD",
+    "maxDiscountPercent": 15.0,
+    "createdAt": "2026-09-05T12:00:00.000Z",
+    "updatedAt": "2026-09-05T12:00:00.000Z"
+  }
+  ```
+
+- **Related Tier Routes**:
+  - `GET /discounts/tiers` (List all tiers, Admin only)
+  - `GET /discounts/tiers/:id` (Get tier by ID, Admin only)
+  - `PUT /discounts/tiers/:id` (Update tier, Admin only)
+  - `DELETE /discounts/tiers/:id` (Delete tier, Admin only)
+
+---
+
+### 2. Category Discount Ceiling CRUD
+**`POST /discounts/categories`** (also `/discounts/category-ceilings`) *(Admin Only)*
+
+Defines maximum discount percentage allowed for a product category.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "category": "Service",
+    "maxDiscountPercent": 10.0
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "category-uuid-456",
+    "category": "Service",
+    "maxDiscountPercent": 10.0,
+    "createdAt": "2026-09-05T12:00:00.000Z",
+    "updatedAt": "2026-09-05T12:00:00.000Z"
+  }
+  ```
+
+- **Related Category Routes**:
+  - `GET /discounts/categories` (List all category ceilings, Admin only)
+  - `GET /discounts/categories/:id` (Get ceiling by ID, Admin only)
+  - `PUT /discounts/categories/:id` (Update ceiling, Admin only)
+  - `DELETE /discounts/categories/:id` (Delete ceiling, Admin only)
+
+---
+
+### 3. Approval Chain CRUD
+**`POST /discounts/approval-chains`** *(Admin Only)*
+
+Defines risk score threshold range and required approval role.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "minRiskScore": 0.1,
+    "maxRiskScore": 5.0,
+    "requiredApprovers": "MANAGER"
+  }
+  ```
+  *Allowed `requiredApprovers` values*: `MANAGER`, `MANAGER_THEN_FINANCE`
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "chain-uuid-789",
+    "minRiskScore": 0.1,
+    "maxRiskScore": 5.0,
+    "requiredApprovers": "MANAGER",
+    "createdAt": "2026-09-05T12:00:00.000Z",
+    "updatedAt": "2026-09-05T12:00:00.000Z"
+  }
+  ```
+
+- **Related Approval Chain Routes**:
+  - `GET /discounts/approval-chains` (List all chains, Admin only)
+  - `GET /discounts/approval-chains/:id` (Get chain by ID, Admin only)
+  - `PUT /discounts/approval-chains/:id` (Update chain, Admin only)
+  - `DELETE /discounts/approval-chains/:id` (Delete chain, Admin only)
+
+---
+
+### 4. Calculate Risk Score
+**`POST /discounts/calculate-risk`**
+
+Evaluates quotation line discounts against category discount ceilings, computes order-weighted blended risk score, and determines required approval chain.
+
+- **Formula**:
+  $$\text{line Overage}_i = \max(0, \text{discountPercent}_i - \text{categoryCeiling}_i)$$
+  $$\text{blendedRiskScore} = \sum_{i} \left( \text{line Overage}_i \times \frac{\text{lineTotal}_i}{\text{orderTotal}} \right)$$
+
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerTier": "GOLD",
+    "lines": [
+      {
+        "category": "Hardware",
+        "discountPercent": 12,
+        "lineTotal": 800.00
+      },
+      {
+        "category": "Service",
+        "discountPercent": 18,
+        "lineTotal": 200.00
+      }
+    ]
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "blendedRiskScore": 1.6,
+    "flaggedLines": [
+      {
+        "category": "Service",
+        "discountPercent": 18,
+        "categoryCeiling": 10,
+        "overage": 8,
+        "lineTotal": 200.00
+      }
+    ],
+    "requiredApprovalChain": "MANAGER"
+  }
+  ```
+
+- **Zero Overage Response `200 OK`**:
+  ```json
+  {
+    "blendedRiskScore": 0,
+    "flaggedLines": [],
+    "requiredApprovalChain": null
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: `customerTier` or line `category` not found in configuration.
+    ```json
+    { "error": "Customer tier 'PLATINUM' not found in discount tier configuration" }
+    ```
+
+

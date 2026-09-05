@@ -40,12 +40,12 @@ model Product {
   sku         String   @unique
   name        String
   description String?
+  category    String?
   basePrice   Float
   currency    String   @default("USD")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  discountTiers  DiscountTier[]
   quotationLines QuotationLine[]
 }
 
@@ -57,33 +57,31 @@ model PriceList {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  discountTiers DiscountTier[]
 }
 
 model DiscountTier {
-  id            String   @id @default(uuid())
-  priceListId   String?
-  priceList     PriceList? @relation(fields: [priceListId], references: [id], onDelete: Cascade)
-  productId     String?
-  product       Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
-  minQuantity   Int
-  maxQuantity   Int?
-  discountType  String   @default("PERCENTAGE")
-  discountValue Float
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  customerTier       String   @unique
+  maxDiscountPercent Float
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model CategoryDiscountCeiling {
+  id                 String   @id @default(uuid())
+  category           String   @unique
+  maxDiscountPercent Float
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 
 model ApprovalChain {
-  id           String   @id @default(uuid())
-  name         String
-  minAmount    Float    @default(0)
-  maxAmount    Float?
-  approverRole String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                String   @id @default(uuid())
+  minRiskScore      Float
+  maxRiskScore      Float?
+  requiredApprovers String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Quotation {
