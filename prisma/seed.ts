@@ -365,6 +365,7 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-DRAFT-01',
       userId: repAlice.id,
+      customerId: customer.id,
       customerName: 'Acme Global Corp',
       customerTier: 'GOLD',
       status: 'DRAFT',
@@ -376,29 +377,35 @@ async function main() {
             quantity: 2,
             unitPrice: 5000.0,
             discount: 5.0,
-            totalPrice: 9500.0
+            discountPercent: 5.0,
+            totalPrice: 9500.0,
+            lineTotal: 9500.0
           },
           {
             productId: gateway.id,
             quantity: 5,
             unitPrice: 500.0,
             discount: 0.0,
-            totalPrice: 2500.0
+            discountPercent: 0.0,
+            totalPrice: 2500.0,
+            lineTotal: 2500.0
           }
         ]
       }
     }
   });
 
-  // Quotation 2: PENDING_APPROVAL (Flagged 25% discount on Hardware exceeds 10% ceiling)
+  // Quotation 2: PENDING_APPROVAL (Flagged 25% discount on Hardware exceeds 10% ceiling; stalled 10 days)
   const qPending = await prisma.quotation.create({
     data: {
       quoteNumber: 'QT-DEMO-PENDING-02',
       userId: repAlice.id,
+      customerId: customer.id,
       customerName: 'Global Logistics Enterprise',
       customerTier: 'SILVER',
       status: 'PENDING_APPROVAL',
       totalAmount: 15300.0,
+      updatedAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), // Stalled 10 days!
       lines: {
         create: [
           {
@@ -406,14 +413,18 @@ async function main() {
             quantity: 4,
             unitPrice: 5000.0,
             discount: 25.0, // Flagged: 15% above 10% Hardware ceiling!
-            totalPrice: 15000.0
+            discountPercent: 25.0,
+            totalPrice: 15000.0,
+            lineTotal: 15000.0
           },
           {
             productId: saas.id,
             quantity: 2,
             unitPrice: 150.0,
             discount: 0.0,
-            totalPrice: 300.0
+            discountPercent: 0.0,
+            totalPrice: 300.0,
+            lineTotal: 300.0
           }
         ]
       }
@@ -441,11 +452,45 @@ async function main() {
     }
   });
 
+  // Additional Rep Alice deals to establish baseline for discount anomaly detection (3+ deals required)
+  await prisma.quotation.create({
+    data: {
+      quoteNumber: 'QT-DEMO-HIST-01',
+      userId: repAlice.id,
+      customerId: customer.id,
+      customerName: 'Baseline Client A',
+      status: 'APPROVED',
+      totalAmount: 5000.0,
+      lines: {
+        create: [
+          { productId: server.id, quantity: 1, unitPrice: 5000.0, discount: 2.0, discountPercent: 2.0, totalPrice: 4900.0, lineTotal: 4900.0 }
+        ]
+      }
+    }
+  });
+
+  await prisma.quotation.create({
+    data: {
+      quoteNumber: 'QT-DEMO-HIST-02',
+      userId: repAlice.id,
+      customerId: customer.id,
+      customerName: 'Baseline Client B',
+      status: 'APPROVED',
+      totalAmount: 1000.0,
+      lines: {
+        create: [
+          { productId: gateway.id, quantity: 2, unitPrice: 500.0, discount: 0.0, discountPercent: 0.0, totalPrice: 1000.0, lineTotal: 1000.0 }
+        ]
+      }
+    }
+  });
+
   // Quotation 3: APPROVED + MULTI-WAREHOUSE SPLIT (Server + 7 Sensors split across East & West)
   const qSplit = await prisma.quotation.create({
     data: {
       quoteNumber: 'QT-DEMO-SPLIT-03',
       userId: repBob.id,
+      customerId: customer.id,
       customerName: 'TechCorp International',
       customerTier: 'GOLD',
       status: 'ALLOCATED',
@@ -531,6 +576,7 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-BACKORDER-04',
       userId: repAlice.id,
+      customerId: customer.id,
       customerName: 'Apex Telemetry Systems',
       customerTier: 'GOLD',
       status: 'PARTIALLY_ALLOCATED',
@@ -580,6 +626,7 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-FULFILLED-05',
       userId: repBob.id,
+      customerId: customer.id,
       customerName: 'Horizon Telecom',
       customerTier: 'GOLD',
       status: 'FULFILLED',
@@ -601,6 +648,31 @@ async function main() {
             unitPrice: 300.0,
             discount: 0.0,
             totalPrice: 300.0
+          }
+        ]
+      }
+    }
+  });
+
+  // Quotation 6: Unfulfilled Delivery Slippage (targetDeliveryDate 14 days in the past)
+  await prisma.quotation.create({
+    data: {
+      quoteNumber: 'QT-DEMO-SLIPPED-06',
+      userId: repBob.id,
+      customerId: customer.id,
+      customerName: 'Slipped Order Systems',
+      customerTier: 'SILVER',
+      status: 'APPROVED',
+      totalAmount: 5000.0,
+      targetDeliveryDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000), // Target date 14 days ago
+      lines: {
+        create: [
+          {
+            productId: server.id,
+            quantity: 1,
+            unitPrice: 5000.0,
+            discount: 0.0,
+            totalPrice: 5000.0
           }
         ]
       }

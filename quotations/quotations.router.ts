@@ -2,6 +2,7 @@
 import { Router, Request, Response } from 'express';
 import { quotationsService } from './quotations.service';
 import { authenticate, AuthenticatedRequest } from '../auth/auth.middleware';
+import { sanitizeForCustomer } from '../shared/auth.sanitizer';
 
 export const quotationsRouter = Router();
 
@@ -31,6 +32,7 @@ quotationsRouter.post('/', authenticate, async (req: AuthenticatedRequest, res: 
       id: quotation.id,
       quoteNumber: quotation.quoteNumber,
       status: quotation.status,
+      customerId: quotation.customerId,
       customerName: quotation.customerName,
       customerTier: quotation.customerTier,
       totalAmount: quotation.totalAmount
@@ -55,10 +57,14 @@ quotationsRouter.get('/', authenticate, async (req: AuthenticatedRequest, res: R
     const repId = req.query.repId ? getParamString(req.query.repId as any) : undefined;
     const teamId = req.query.teamId ? getParamString(req.query.teamId as any) : undefined;
 
-    const list = await quotationsService.getQuotations(
+    let list = await quotationsService.getQuotations(
       { id: req.user.id, role: req.user.role },
       { status, repId, teamId }
     );
+
+    if (req.user.role === 'CUSTOMER') {
+      list = sanitizeForCustomer(list);
+    }
 
     res.status(200).json(list);
   } catch (error: any) {
@@ -70,10 +76,13 @@ quotationsRouter.get('/', authenticate, async (req: AuthenticatedRequest, res: R
 // ============================================================================
 // 3. GET /quotations/:id - Full Detail View
 // ============================================================================
-quotationsRouter.get('/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+quotationsRouter.get('/:id', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const id = getParamString(req.params.id);
-    const quotation = await quotationsService.getQuotationById(id);
+    let quotation = await quotationsService.getQuotationById(id);
+    if (req.user?.role === 'CUSTOMER') {
+      quotation = sanitizeForCustomer(quotation);
+    }
     res.status(200).json(quotation);
   } catch (error: any) {
     const status = error.statusCode || 404;

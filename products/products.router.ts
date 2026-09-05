@@ -1,13 +1,33 @@
-// products/products.router.ts
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { productsService } from './products.service';
-import { authenticate, requireRole } from '../auth/auth.middleware';
+import { authenticate, requireRole, AuthenticatedRequest } from '../auth/auth.middleware';
+import { sanitizeForCustomer } from '../shared/auth.sanitizer';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'dealflow360-super-secret-key';
 
 export const productsRouter = Router();
 
 const getParamString = (param: string | string[] | undefined): string => {
   if (Array.isArray(param)) return param[0] || '';
   return param || '';
+};
+
+const getUserRole = (req: Request): string | undefined => {
+  const authUser = (req as AuthenticatedRequest).user;
+  if (authUser?.role) return authUser.role;
+
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const token = authHeader.split(' ')[1];
+      const decoded = jwt.verify(token, JWT_SECRET) as any;
+      return decoded.role;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 };
 
 // ============================================================================
@@ -18,7 +38,10 @@ productsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
     const category = req.query.category ? getParamString(req.query.category as any) : undefined;
     const search = req.query.search ? getParamString(req.query.search as any) : undefined;
 
-    const products = await productsService.getProducts({ category, search });
+    let products = await productsService.getProducts({ category, search });
+    if (getUserRole(req) === 'CUSTOMER') {
+      products = sanitizeForCustomer(products);
+    }
     res.status(200).json(products);
   } catch (error: any) {
     const status = error.statusCode || 500;
@@ -140,7 +163,10 @@ productsRouter.delete('/:id/variants/:variantId', authenticate, requireRole(['AD
 productsRouter.get('/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const id = getParamString(req.params.id);
-    const product = await productsService.getProductById(id);
+    let product = await productsService.getProductById(id);
+    if (getUserRole(req) === 'CUSTOMER') {
+      product = sanitizeForCustomer(product);
+    }
     res.status(200).json(product);
   } catch (error: any) {
     const status = error.statusCode || 404;

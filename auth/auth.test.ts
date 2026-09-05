@@ -7,15 +7,17 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || 'dealflow360-super-secret-key';
 
 describe('Auth Module Integration Tests', () => {
+  const testEmails = ['manager@dealflow.com', 'customer@acme.com', 'hacker@dealflow.com', 'testuser@dealflow.com'];
+
   beforeAll(async () => {
     // Clean up test database before running tests
     await prisma.portalMagicLink.deleteMany();
-    await prisma.user.deleteMany();
+    await prisma.user.deleteMany({ where: { email: { in: testEmails } } });
   });
 
   afterAll(async () => {
     await prisma.portalMagicLink.deleteMany();
-    await prisma.user.deleteMany();
+    await prisma.user.deleteMany({ where: { email: { in: testEmails } } });
     await prisma.$disconnect();
   });
 
