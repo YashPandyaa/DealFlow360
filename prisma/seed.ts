@@ -13,7 +13,7 @@ async function main() {
   console.log('👤 Seeding Users...');
   const admin = await prisma.user.upsert({
     where: { email: 'admin@dealflow360.com' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'admin@dealflow360.com',
       passwordHash,
@@ -25,7 +25,7 @@ async function main() {
 
   const manager = await prisma.user.upsert({
     where: { email: 'manager@dealflow360.com' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'manager@dealflow360.com',
       passwordHash,
@@ -35,9 +35,21 @@ async function main() {
     }
   });
 
+  await prisma.user.upsert({
+    where: { email: 'manager@dealflow.com' },
+    update: { passwordHash },
+    create: {
+      email: 'manager@dealflow.com',
+      passwordHash,
+      name: 'Sales Manager',
+      role: 'MANAGER',
+      teamId: 'MANAGEMENT'
+    }
+  });
+
   const finance = await prisma.user.upsert({
     where: { email: 'finance@dealflow360.com' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'finance@dealflow360.com',
       passwordHash,
@@ -47,9 +59,45 @@ async function main() {
     }
   });
 
+  await prisma.user.upsert({
+    where: { email: 'finance@dealflow.com' },
+    update: { passwordHash },
+    create: {
+      email: 'finance@dealflow.com',
+      passwordHash,
+      name: 'Finance Admin',
+      role: 'FINANCE',
+      teamId: 'FINANCE'
+    }
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'rep@dealflow360.com' },
+    update: { passwordHash },
+    create: {
+      email: 'rep@dealflow360.com',
+      passwordHash,
+      name: 'Sales Rep',
+      role: 'REP',
+      teamId: 'TEAM-EAST'
+    }
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'rep@dealflow.com' },
+    update: { passwordHash },
+    create: {
+      email: 'rep@dealflow.com',
+      passwordHash,
+      name: 'Sales Rep',
+      role: 'REP',
+      teamId: 'TEAM-EAST'
+    }
+  });
+
   const repAlice = await prisma.user.upsert({
     where: { email: 'rep.alice@dealflow360.com' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'rep.alice@dealflow360.com',
       passwordHash,
@@ -152,6 +200,32 @@ async function main() {
 
   // 3. Seed Warehouses & Stock Levels
   console.log('🏭 Seeding Warehouses & Stock Inventory...');
+  const whMain = await prisma.warehouse.upsert({
+    where: { code: 'WH-MAIN' },
+    update: { name: 'Main Warehouse', shippingCostWeighting: 1.0 },
+    create: {
+      name: 'Main Warehouse',
+      code: 'WH-MAIN',
+      location: 'Dallas, TX',
+      capacity: 1500,
+      shippingCostWeighting: 1.0,
+      isActive: true
+    }
+  });
+
+  const whEastDepot = await prisma.warehouse.upsert({
+    where: { code: 'WH-EASTDEPOT' },
+    update: { name: 'East Depot', shippingCostWeighting: 1.2 },
+    create: {
+      name: 'East Depot',
+      code: 'WH-EASTDEPOT',
+      location: 'Atlanta, GA',
+      capacity: 800,
+      shippingCostWeighting: 1.2,
+      isActive: true
+    }
+  });
+
   const whEast = await prisma.warehouse.upsert({
     where: { code: 'WH-EAST' },
     update: { name: 'Warehouse East (Boston)' },
@@ -322,13 +396,18 @@ async function main() {
   });
   await prisma.categoryDiscountCeiling.upsert({
     where: { category: 'Software' },
-    update: { maxDiscountPercent: 20.0 },
-    create: { category: 'Software', maxDiscountPercent: 20.0 }
+    update: { maxDiscountPercent: 10.0 },
+    create: { category: 'Software', maxDiscountPercent: 10.0 }
+  });
+  await prisma.categoryDiscountCeiling.upsert({
+    where: { category: 'Services' },
+    update: { maxDiscountPercent: 5.0 },
+    create: { category: 'Services', maxDiscountPercent: 5.0 }
   });
   await prisma.categoryDiscountCeiling.upsert({
     where: { category: 'Service' },
-    update: { maxDiscountPercent: 10.0 },
-    create: { category: 'Service', maxDiscountPercent: 10.0 }
+    update: { maxDiscountPercent: 5.0 },
+    create: { category: 'Service', maxDiscountPercent: 5.0 }
   });
 
   await prisma.approvalChain.deleteMany();

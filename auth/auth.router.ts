@@ -74,3 +74,16 @@ authRouter.get(
     });
   }
 );
+
+/**
+ * GET /auth/customers
+ * Fetch list of customer accounts for sales dropdown selection
+ */
+authRouter.get('/customers', authenticate, async (req: Request, res: Response) => {
+  try {
+    const customers = await AuthService.getCustomers();
+    res.status(200).json(customers);
+  } catch (error: any) {
+    res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});

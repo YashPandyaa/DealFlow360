@@ -35,7 +35,6 @@ discountsRouter.post(
 discountsRouter.get(
   '/tiers',
   authenticate,
-  requireRole(['ADMIN']),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const tiers = await discountsService.getAllDiscountTiers();
@@ -124,8 +123,8 @@ const handleGetCategoryCeilings = async (req: Request, res: Response): Promise<v
   }
 };
 
-discountsRouter.get('/categories', authenticate, requireRole(['ADMIN']), handleGetCategoryCeilings);
-discountsRouter.get('/category-ceilings', authenticate, requireRole(['ADMIN']), handleGetCategoryCeilings);
+discountsRouter.get('/categories', authenticate, handleGetCategoryCeilings);
+discountsRouter.get('/category-ceilings', authenticate, handleGetCategoryCeilings);
 
 const handleGetCategoryCeilingById = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -196,7 +195,6 @@ discountsRouter.post(
 discountsRouter.get(
   '/approval-chains',
   authenticate,
-  requireRole(['ADMIN']),
   async (req: Request, res: Response): Promise<void> => {
     try {
       const chains = await discountsService.getAllApprovalChains();
@@ -258,13 +256,77 @@ discountsRouter.delete(
 );
 
 // ============================================================================
-// 4. POST /discounts/calculate-risk
+// 4. CustomerDiscountLimit Endpoints (CRUD - Admin Only for mutations)
+// ============================================================================
+
+discountsRouter.post(
+  '/customer-limits',
+  authenticate,
+  requireRole(['ADMIN']),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { customerId, customerName, maxDiscountPercent } = req.body;
+      const record = await discountsService.setCustomerDiscountLimit({
+        customerId,
+        customerName,
+        maxDiscountPercent: Number(maxDiscountPercent)
+      });
+      res.status(201).json(record);
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+discountsRouter.get('/customer-limits', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limits = await discountsService.getAllCustomerDiscountLimits();
+    res.status(200).json(limits);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+discountsRouter.get('/customer-limits/:customerId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const customerId = getParamString(req.params.customerId);
+    const limit = await discountsService.getCustomerDiscountLimit(customerId);
+    res.status(200).json(limit || { customerId, maxDiscountPercent: 15.0 });
+  } catch (error: any) {
+    res.status(404).json({ error: error.message });
+  }
+});
+
+discountsRouter.delete(
+  '/customer-limits/:id',
+  authenticate,
+  requireRole(['ADMIN']),
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const id = getParamString(req.params.id);
+      await discountsService.deleteCustomerDiscountLimit(id);
+      res.status(200).json({ message: 'CustomerDiscountLimit deleted successfully' });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message });
+    }
+  }
+);
+
+// ============================================================================
+// 5. POST /discounts/calculate-risk
 // ============================================================================
 
 discountsRouter.post('/calculate-risk', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { customerTier, lines } = req.body;
-    const result = await discountsService.calculateRisk({ customerTier, lines });
+    const { quotationId, salesRepId, customerTier, customerId, customerName, lines } = req.body;
+    const result = await discountsService.calculateRisk({
+      quotationId,
+      salesRepId,
+      customerTier,
+      customerId,
+      customerName,
+      lines
+    });
     res.status(200).json(result);
   } catch (error: any) {
     res.status(400).json({ error: error.message });

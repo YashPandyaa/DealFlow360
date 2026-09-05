@@ -78,13 +78,74 @@ quotationsRouter.get('/', authenticate, async (req: AuthenticatedRequest, res: R
 quotationsRouter.get('/:id', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     const id = getParamString(req.params.id);
-    let quotation = await quotationsService.getQuotationById(id);
+    const userContext = req.user ? { id: req.user.id, role: req.user.role } : undefined;
+    let quotation = await quotationsService.getQuotationById(id, userContext);
     if (req.user?.role === 'CUSTOMER') {
       quotation = sanitizeForCustomer(quotation);
     }
     res.status(200).json(quotation);
   } catch (error: any) {
     const status = error.statusCode || 404;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// 3b. POST /quotations/:id/confirm - Confirm Quotation
+// ============================================================================
+quotationsRouter.post('/:id/confirm', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.user.id || !req.user.role) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const id = getParamString(req.params.id);
+    let quotation = await quotationsService.confirmQuotation(id, { id: req.user.id, role: req.user.role });
+    if (req.user.role === 'CUSTOMER') {
+      quotation = sanitizeForCustomer(quotation);
+    }
+    res.status(200).json(quotation);
+  } catch (error: any) {
+    const status = error.statusCode || 400;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+// ============================================================================
+// 3c. Line Item & Quotation Comments
+// ============================================================================
+quotationsRouter.post('/:id/comments', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.user.id || !req.user.role) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const id = getParamString(req.params.id);
+    const { comment, lineId } = req.body;
+    const created = await quotationsService.addComment(
+      id,
+      { id: req.user.id, role: req.user.role },
+      comment,
+      lineId
+    );
+    res.status(201).json(created);
+  } catch (error: any) {
+    const status = error.statusCode || 400;
+    res.status(status).json({ error: error.message });
+  }
+});
+
+quotationsRouter.get('/:id/comments', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user || !req.user.id || !req.user.role) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const id = getParamString(req.params.id);
+    const comments = await quotationsService.getComments(id, { id: req.user.id, role: req.user.role });
+    res.status(200).json(comments);
+  } catch (error: any) {
+    const status = error.statusCode || 400;
     res.status(status).json({ error: error.message });
   }
 });
@@ -107,3 +168,15 @@ const handleUpdateLines = async (req: Request, res: Response): Promise<void> => 
 
 quotationsRouter.patch('/:id/lines', authenticate, handleUpdateLines);
 quotationsRouter.put('/:id/lines', authenticate, handleUpdateLines);
+
+quotationsRouter.patch('/:id', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    const id = getParamString(req.params.id);
+    const { customerId, customerName, customerTier } = req.body;
+    const updated = await quotationsService.updateQuotationMeta(id, { customerId, customerName, customerTier });
+    res.status(200).json(updated);
+  } catch (error: any) {
+    const status = error.statusCode || 400;
+    res.status(status).json({ error: error.message });
+  }
+});

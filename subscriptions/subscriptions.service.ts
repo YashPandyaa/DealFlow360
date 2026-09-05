@@ -302,6 +302,7 @@ export class SubscriptionsService {
       if (creditAmount > 0) {
         creditNote = await prisma.creditNote.create({
           data: {
+            creditNoteNumber: `CN-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
             subscriptionId: subscription.id,
             amount: creditAmount,
             reason: `Prorated credit for quantity decrease from ${oldQuantity} to ${newQuantity} (${daysRemaining}/${totalDaysInCycle} days remaining)`
@@ -397,6 +398,7 @@ export class SubscriptionsService {
       if (unusedCredit > 0) {
         creditNote = await prisma.creditNote.create({
           data: {
+            creditNoteNumber: `CN-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
             subscriptionId: subscription.id,
             amount: unusedCredit,
             reason: reason || `Subscription cancelled mid-cycle: refund for ${daysRemaining}/${totalDaysInCycle} unused days`
