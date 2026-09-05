@@ -208,40 +208,45 @@ describe('Quick Test Flow - End-to-End DealFlow360 Integration', () => {
     adminToken = admRes.body.token;
   });
 
-  // Step 2: Create Quotation with Server + 10 Sensors + Discount
-  test('Step 2: Create Quotation with Hardware line items', async () => {
-    createdQuotation = await prisma.quotation.create({
-      data: {
-        quoteNumber: 'Q-FLOW-2026-001',
-        userId: repUser.id,
+  // Step 2: Create Quotation via Quotations CRUD API with Server + 10 Sensors + Discount
+  test('Step 2: Create Quotation and upsert lines via Quotations CRUD API', async () => {
+    // Create DRAFT quotation via POST /quotations
+    const createRes = await request(app)
+      .post('/quotations')
+      .set('Authorization', `Bearer ${repToken}`)
+      .send({
         customerName: 'Apex Logistics Global',
-        customerTier: 'GOLD',
-        totalAmount: 4100.0,
-        status: 'DRAFT',
-        lines: {
-          create: [
-            {
-              productId: serverProduct.id,
-              quantity: 1,
-              unitPrice: 4000.0,
-              discount: 20.0, // Exceeds 15% hardware ceiling
-              totalPrice: 3200.0
-            },
-            {
-              productId: sensorProduct.id,
-              quantity: 10, // 10 units needed, available 7 across all warehouses
-              unitPrice: 100.0,
-              discount: 10.0,
-              totalPrice: 900.0
-            }
-          ]
-        }
-      },
-      include: { lines: true }
-    });
+        customerTier: 'GOLD'
+      });
 
-    expect(createdQuotation.id).toBeDefined();
-    expect(createdQuotation.lines).toHaveLength(2);
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.id).toBeDefined();
+    const quotationId = createRes.body.id;
+
+    // Add line items via PATCH /quotations/:id/lines
+    const linesRes = await request(app)
+      .patch(`/quotations/${quotationId}/lines`)
+      .set('Authorization', `Bearer ${repToken}`)
+      .send({
+        lines: [
+          {
+            productId: serverProduct.id,
+            quantity: 1,
+            discountPercent: 20.0 // Server base $4,000 * 0.8 = $3,200 (Exceeds 15% hardware ceiling)
+          },
+          {
+            productId: sensorProduct.id,
+            quantity: 10, // 10 units needed, available 7 across all warehouses (3 East, 4 West)
+            discountPercent: 10.0 // Sensor base $100 * 10 * 0.9 = $900
+          }
+        ]
+      });
+
+    expect(linesRes.status).toBe(200);
+    expect(linesRes.body.lines).toHaveLength(2);
+    expect(linesRes.body.totalAmount).toBe(4100.0);
+
+    createdQuotation = linesRes.body;
   });
 
   // Step 3: Check Upsell Recommendations

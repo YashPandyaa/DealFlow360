@@ -51,6 +51,12 @@ reportsRouter.get('/export', async (req: Request, res: Response): Promise<void> 
   try {
     const { from, to, salesRepId, teamId, approvalStatus, status, category, format } = req.query;
 
+    const requestedFormat = format ? String(format).toLowerCase() : 'pdf';
+    if (!['pdf', 'xlsx', 'csv'].includes(requestedFormat)) {
+      res.status(400).json({ error: "Invalid export format. Supported formats: 'pdf', 'xlsx', 'csv'" });
+      return;
+    }
+
     const exportData = await reportsService.exportReport(
       {
         from: from ? String(from) : undefined,
@@ -60,7 +66,7 @@ reportsRouter.get('/export', async (req: Request, res: Response): Promise<void> 
         approvalStatus: approvalStatus ? String(approvalStatus) : (status ? String(status) : undefined),
         category: category ? String(category) : undefined
       },
-      format ? String(format) : 'pdf'
+      requestedFormat
     );
 
     res.setHeader('Content-Type', exportData.contentType);

@@ -1310,12 +1310,160 @@ Generates a unified invoice aggregating both one-time quotation line items and r
 
 ## Inter-Module Workflow & Wiring Agreement
 
+- **Inter-Module Workflow & Wiring Agreement**:
+
 1. **Wire Approval $\rightarrow$ Fulfillment**:
    - Frontend or automated pipeline triggers `POST /warehouses/fulfill/:quotationId` upon `APPROVED` quotation status.
    - The engine automatically resolves stock across all warehouses, reserves inventory, and tracks backorders.
 2. **Wire Fulfillment $\rightarrow$ Billing**:
    - Frontend or customer portal requests `GET /orders/:orderId/invoice` once an order is placed/fulfilled.
    - Subscriptions and hardware line items are automatically partitioned into one-time vs recurring charges.
+
+---
+
+## Core Quotation Management Endpoints (`/quotations`, `/backend/quotations`)
+
+### 1. Create DRAFT Quotation
+**`POST /quotations`**
+
+Creates a new `DRAFT` quotation for the authenticated rep.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerId": "user-customer-uuid-123",
+    "customerName": "Acme Corp",
+    "customerTier": "GOLD",
+    "currency": "USD"
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "quotationId": "quote-uuid-123",
+    "id": "quote-uuid-123",
+    "quoteNumber": "QT-2026-123456",
+    "status": "DRAFT",
+    "customerId": "user-customer-uuid-123",
+    "customerTier": "GOLD",
+    "totalAmount": 0
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: `customerId` does not exist in database.
+
+---
+
+### 2. Quotation Pipeline List View
+**`GET /quotations`**
+
+Lists quotations for the pipeline view. Reps see only their own quotations by default unless their role is `MANAGER` or `ADMIN`.
+
+- **Headers**: `Authorization: Bearer <JWT>`
+- **Query Parameters**:
+  - `status` (String, optional): Filter by status (`DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `REJECTED`, `READY_FOR_FULFILLMENT`).
+  - `repId` (String, optional): Filter by rep user ID (for Manager/Admin).
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "id": "quote-uuid-123",
+      "quoteNumber": "QT-2026-123456",
+      "repId": "user-rep-uuid",
+      "repName": "Sales Rep",
+      "customerId": "user-customer-uuid-123",
+      "customerName": "Acme Corp",
+      "customerTier": "GOLD",
+      "currency": "USD",
+      "amount": 1280.00,
+      "totalAmount": 1280.00,
+      "status": "DRAFT",
+      "updatedAt": "2026-09-05T15:00:00.000Z"
+    }
+  ]
+  ```
+
+---
+
+### 3. Quotation Full Detail View
+**`GET /quotations/:id`**
+
+Fetches complete quotation details including all line items with resolved product info, customer tier, totals, and approval history.
+
+- **Headers**: `Authorization: Bearer <JWT>`
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "id": "quote-uuid-123",
+    "quoteNumber": "QT-2026-123456",
+    "status": "DRAFT",
+    "customerTier": "GOLD",
+    "currency": "USD",
+    "totalAmount": 1280.00,
+    "lines": [
+      {
+        "id": "line-uuid-1",
+        "productId": "prod-hw-1",
+        "quantity": 1,
+        "unitPrice": 1000.00,
+        "discountPercent": 12.0,
+        "lineTotal": 880.00,
+        "product": {
+          "name": "Enterprise Server",
+          "category": "Hardware"
+        }
+      }
+    ]
+  }
+  ```
+
+---
+
+### 4. Upsert Quotation Lines
+**`PATCH /quotations/:id/lines`** (also `PUT /quotations/:id/lines`)
+
+Replaces the full set of line items on a `DRAFT` quotation. Resolves `unitPrice` server-side from the Products module, recalculates running `totalAmount`, updates line totals, and bumps `updatedAt`.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "lines": [
+      {
+        "productId": "prod-hw-1",
+        "quantity": 1,
+        "discountPercent": 12
+      },
+      {
+        "productId": "prod-sv-1",
+        "quantity": 1,
+        "discountPercent": 20
+      }
+    ]
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "id": "quote-uuid-123",
+    "status": "DRAFT",
+    "totalAmount": 1280.00,
+    "lines": [...]
+  }
+  ```
+
+- **Error Responses**:
+  - `409 Conflict`: Attempting to edit lines on a non-`DRAFT` quotation (e.g. `PENDING_APPROVAL` or `APPROVED`).
+    ```json
+    { "error": "Cannot edit lines on quotation with status 'PENDING_APPROVAL'. Only DRAFT quotations can be modified." }
+    ```
+
 
 
 

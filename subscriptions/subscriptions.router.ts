@@ -89,7 +89,11 @@ const handleUpdatePlan = async (req: Request, res: Response): Promise<void> => {
     });
     res.status(200).json(updatedPlan);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    if (error.message?.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
   }
 };
 
@@ -109,7 +113,11 @@ const handleDeactivatePlan = async (req: Request, res: Response): Promise<void> 
       plan: deactivatedPlan
     });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    if (error.message?.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
   }
 };
 
@@ -128,14 +136,19 @@ subscriptionsRouter.post('/', async (req: Request, res: Response): Promise<void>
   try {
     const { quotationId, planId, quantity, startDate, cyclesToGenerate } = req.body;
 
-    if (!planId) {
+    if (!planId || typeof planId !== 'string' || !planId.trim()) {
       res.status(400).json({ error: 'planId is required' });
+      return;
+    }
+
+    if (quantity !== undefined && (isNaN(Number(quantity)) || Number(quantity) <= 0)) {
+      res.status(400).json({ error: 'Quantity must be a positive number' });
       return;
     }
 
     const subscription = await subscriptionsService.createSubscription({
       quotationId,
-      planId,
+      planId: planId.trim(),
       quantity: quantity !== undefined ? Number(quantity) : 1,
       startDate,
       cyclesToGenerate: cyclesToGenerate ? Number(cyclesToGenerate) : 12
@@ -143,7 +156,11 @@ subscriptionsRouter.post('/', async (req: Request, res: Response): Promise<void>
 
     res.status(201).json(subscription);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    if (error.message?.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
   }
 });
 
@@ -171,7 +188,7 @@ subscriptionsRouter.patch('/:id/quantity', async (req: Request, res: Response): 
     const id = getParamString(req.params.id);
     const { newQuantity, effectiveDate } = req.body;
 
-    if (newQuantity === undefined || Number(newQuantity) <= 0) {
+    if (newQuantity === undefined || isNaN(Number(newQuantity)) || Number(newQuantity) <= 0) {
       res.status(400).json({ error: 'Valid positive integer newQuantity is required' });
       return;
     }
@@ -184,7 +201,13 @@ subscriptionsRouter.patch('/:id/quantity', async (req: Request, res: Response): 
 
     res.status(200).json(result);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    if (error.message?.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else if (error.message?.includes('Cannot modify quantity of subscription with status')) {
+      res.status(409).json({ error: error.message });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
   }
 });
 
@@ -205,7 +228,13 @@ subscriptionsRouter.post('/:id/cancel', async (req: Request, res: Response): Pro
 
     res.status(200).json(result);
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    if (error.message?.includes('not found')) {
+      res.status(404).json({ error: error.message });
+    } else if (error.message?.includes('already cancelled')) {
+      res.status(409).json({ error: error.message });
+    } else {
+      res.status(400).json({ error: error.message });
+    }
   }
 });
 

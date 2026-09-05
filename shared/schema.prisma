@@ -111,8 +111,10 @@ model Quotation {
   quoteNumber        String            @unique
   userId             String
   user               User              @relation(fields: [userId], references: [id])
+  customerId         String?
   customerName       String?
   customerTier       String?           @default("GOLD")
+  currency           String            @default("USD")
   status             String            @default("DRAFT")
   totalAmount        Float             @default(0)
   targetDeliveryDate DateTime?
@@ -125,17 +127,19 @@ model Quotation {
 }
 
 model QuotationLine {
-  id          String    @id @default(uuid())
-  quotationId String
-  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  productId   String
-  product     Product   @relation(fields: [productId], references: [id])
-  quantity    Int
-  unitPrice   Float
-  discount    Float     @default(0)
-  totalPrice  Float
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  quotationId     String
+  quotation       Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product   @relation(fields: [productId], references: [id])
+  quantity        Int
+  unitPrice       Float
+  discount        Float     @default(0)
+  discountPercent Float     @default(0)
+  totalPrice      Float     @default(0)
+  lineTotal       Float     @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model ApprovalRequest {
