@@ -970,6 +970,147 @@ Triggers an escalation nudge action for a stalled deal or anomaly by logging an 
   }
   ```
 
+---
+
+## Product Catalog Endpoints (`/products`, `/backend/products`)
+
+### 1. List Products (With Category & Search Filters)
+**`GET /products`**
+
+Lists products with optional category filtering and search string matching against name, SKU, or description.
+
+- **Query Parameters**:
+  - `category` (String, optional): Filter by exact category (e.g. `Hardware`, `Services`, `Subscriptions`).
+  - `search` (String, optional): Case-insensitive string search against product name, SKU, or description (e.g. `laptop`).
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "id": "prod-uuid-1",
+      "sku": "HW-WKS-01",
+      "name": "Pro Workstation Laptop",
+      "description": "Mobile workstation with dedicated GPU",
+      "category": "Hardware",
+      "basePrice": 1500.00,
+      "unit": "PCS",
+      "tax": 10.0,
+      "marginPercent": 25.0,
+      "currency": "USD",
+      "variants": [
+        {
+          "id": "variant-uuid-1",
+          "attribute": "Storage",
+          "value": "1TB SSD",
+          "extraPrice": 150.00
+        }
+      ],
+      "priceLists": []
+    }
+  ]
+  ```
+
+---
+
+### 2. Create Product (With Optional Nested Variants)
+**`POST /products`** *(Admin Only)*
+
+Creates a new product in the catalog with optional nested variants.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "sku": "HW-SRV-01",
+    "name": "Enterprise Rack Server",
+    "description": "Dual-socket 2U rack server",
+    "category": "Hardware",
+    "basePrice": 2500.00,
+    "unit": "PCS",
+    "tax": 10.0,
+    "marginPercent": 30.0,
+    "currency": "USD",
+    "variants": [
+      {
+        "attribute": "RAM",
+        "value": "64GB",
+        "extraPrice": 200.00
+      }
+    ]
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "prod-uuid-2",
+    "sku": "HW-SRV-01",
+    "name": "Enterprise Rack Server",
+    "category": "Hardware",
+    "basePrice": 2500.00,
+    "marginPercent": 30.0,
+    "variants": []
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: `basePrice` or `marginPercent` is negative.
+  - `403 Forbidden`: User is not an Admin.
+
+---
+
+### 3. Product Price Resolution
+**`GET /products/:id/price?customerTier=GOLD&currency=USD`**
+
+Resolves final tier-aware price and currency conversion for a product. Looks up `PriceList` for tier+currency overrides; falls back to FX rate converted base price.
+
+- **Query Parameters**:
+  - `customerTier` (String, optional): `BRONZE`, `SILVER`, `GOLD`
+  - `currency` (String, optional): Target currency (e.g. `USD`, `EUR`, `GBP`, `CAD`, `INR`)
+
+- **Response `200 OK` (Override Matched)**:
+  ```json
+  {
+    "productId": "prod-uuid-1",
+    "productName": "Enterprise Rack Server",
+    "customerTier": "GOLD",
+    "currency": "USD",
+    "basePrice": 2500.00,
+    "overridePrice": 2200.00,
+    "resolvedPrice": 2200.00,
+    "currencyConverted": false
+  }
+  ```
+
+- **Response `200 OK` (FX Converted)**:
+  ```json
+  {
+    "productId": "prod-uuid-1",
+    "productName": "Enterprise Rack Server",
+    "customerTier": "SILVER",
+    "currency": "EUR",
+    "basePrice": 2500.00,
+    "overridePrice": null,
+    "resolvedPrice": 2300.00,
+    "currencyConverted": true
+  }
+  ```
+
+---
+
+### 4. Delete Product
+**`DELETE /products/:id`** *(Admin Only)*
+
+Deletes a product from the catalog. Blocks deletion with `409 Conflict` if the product is referenced in existing quotations or price lists.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`
+
+- **Error Response `409 Conflict`**:
+  ```json
+  { "error": "Cannot delete product 'prod-uuid-1' because it is referenced in existing quotations or price lists" }
+  ```
+
+
 
 
 

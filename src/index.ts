@@ -9,6 +9,7 @@ import { discountsRouter } from '../discounts/discounts.router';
 import { upsellRouter } from '../upsell/upsell.router';
 import { reportsRouter } from '../reports/reports.router';
 import { approvalsRouter } from '../approvals/approvals.router';
+import { productsRouter } from '../products/products.router';
 
 dotenv.config();
 
@@ -37,6 +38,10 @@ app.use('/backend/upsell', upsellRouter);
 // Approval Engine Module Routes
 app.use('/approvals', approvalsRouter);
 app.use('/backend/approvals', approvalsRouter);
+
+// Product Catalog Module Routes
+app.use('/products', productsRouter);
+app.use('/backend/products', productsRouter);
 
 // Reporting & Deal Health Analytics Module Routes
 app.use('/reports', reportsRouter);

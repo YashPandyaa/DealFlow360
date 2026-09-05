@@ -43,22 +43,41 @@ model Product {
   description   String?
   category      String?
   basePrice     Float
+  unit          String?  @default("PCS")
+  tax           Float    @default(0)
   marginPercent Float    @default(0)
   currency      String   @default("USD")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  variants       ProductVariant[]
+  priceLists     PriceList[]
   quotationLines QuotationLine[]
 }
 
+model ProductVariant {
+  id         String   @id @default(uuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  attribute  String
+  value      String
+  extraPrice Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 model PriceList {
-  id          String   @id @default(uuid())
-  name        String
-  currency    String   @default("USD")
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(uuid())
+  name          String?
+  customerTier  String?
+  currency      String   @default("USD")
+  productId     String?
+  product       Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  overridePrice Float?
+  description   String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model DiscountTier {
