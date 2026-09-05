@@ -1,0 +1,183 @@
+// shared/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotations Quotation[]
+  auditLogs  AuditLog[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  sku         String   @unique
+  name        String
+  description String?
+  basePrice   Float
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  discountTiers  DiscountTier[]
+  quotationLines QuotationLine[]
+}
+
+model PriceList {
+  id          String   @id @default(uuid())
+  name        String
+  currency    String   @default("USD")
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  discountTiers DiscountTier[]
+}
+
+model DiscountTier {
+  id            String   @id @default(uuid())
+  priceListId   String?
+  priceList     PriceList? @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQuantity   Int
+  maxQuantity   Int?
+  discountType  String   @default("PERCENTAGE")
+  discountValue Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ApprovalChain {
+  id           String   @id @default(uuid())
+  name         String
+  minAmount    Float    @default(0)
+  maxAmount    Float?
+  approverRole String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Quotation {
+  id          String   @id @default(uuid())
+  quoteNumber String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  status      String   @default("DRAFT")
+  totalAmount Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lines QuotationLine[]
+}
+
+model QuotationLine {
+  id          String    @id @default(uuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitPrice   Float
+  discount    Float     @default(0)
+  totalPrice  Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+// --- Dev B Models ---
+
+model Warehouse {
+  id          String            @id @default(uuid())
+  name        String
+  code        String            @unique
+  location    String?
+  capacity    Int?
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  stockAllocations StockAllocation[]
+}
+
+model StockAllocation {
+  id          String    @id @default(uuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productId   String    // Foreign key to Product
+  quotationId String?   // Foreign key to Quotation
+  quantity    Int       @default(0)
+  status      String    @default("RESERVED") // RESERVED, ALLOCATED, RELEASED, FULFILLED
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SubscriptionPlan {
+  id               String            @id @default(uuid())
+  name             String
+  code             String?           @unique
+  description      String?
+  billingFrequency String            @default("MONTHLY") // MONTHLY, QUARTERLY, ANNUALLY
+  price            Float
+  currency         String            @default("USD")
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  billingSchedules BillingSchedule[]
+}
+
+model BillingSchedule {
+  id                 String           @id @default(uuid())
+  subscriptionPlanId String
+  subscriptionPlan   SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id], onDelete: Cascade)
+  quotationId        String?          // Foreign key to Quotation
+  userId             String?          // Foreign key to User
+  startDate          DateTime
+  nextBillingDate    DateTime
+  endDate            DateTime?
+  status             String           @default("ACTIVE") // ACTIVE, PAUSED, CANCELLED
+  amount             Float
+  currency           String           @default("USD")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model UpsellRule {
+  id                  String   @id @default(uuid())
+  name                String
+  description         String?
+  triggerProductId    String?  // Foreign key / identifier for triggering product
+  suggestedProductId  String?  // Foreign key / identifier for suggested product
+  discountPercentage  Float?   @default(0)
+  minQuantity         Int?     @default(1)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
