@@ -10,6 +10,7 @@ import {
   CheckCircle2 
 } from 'lucide-react';
 import { useWorkspace } from './WorkspaceContext';
+import { useAuth } from '../auth/AuthContext';
 import './WorkspaceLayout.css';
 
 export const WorkspaceLayout: React.FC = () => {
@@ -22,6 +23,8 @@ export const WorkspaceLayout: React.FC = () => {
     lastReloadedAt, 
     clearWorkspace 
   } = useWorkspace();
+  
+  const { simulate401 } = useAuth();
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -127,7 +130,18 @@ export const WorkspaceLayout: React.FC = () => {
             <span>Go to Back-end</span>
           </button>
 
-          {/* Action 3: Close Workspace Button */}
+          {/* Action 3: Simulate 401 Expiry Button */}
+          <button
+            type="button"
+            className="action-btn action-btn-close"
+            style={{ borderColor: '#ef4444', color: '#ef4444' }}
+            onClick={simulate401}
+            title="Simulate token expiry"
+          >
+            <span>Simulate 401</span>
+          </button>
+
+          {/* Action 4: Close Workspace Button */}
           <button
             type="button"
             className="action-btn action-btn-close"

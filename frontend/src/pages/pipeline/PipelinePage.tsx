@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { GitPullRequest, ListFilter, LayoutGrid, ArrowRight, CheckCircle } from 'lucide-react';
+import { GitPullRequest, ListFilter, LayoutGrid, ArrowRight, CheckCircle, Plus } from 'lucide-react';
 import { useWorkspace } from '../workspace';
 
 interface MockDeal {
@@ -23,8 +23,10 @@ export const PipelinePage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { activeQuotationId, setActiveQuotationId, registerReloadListener } = useWorkspace();
-  const [deals] = useState<MockDeal[]>(INITIAL_DEALS);
+  const [scenario, setScenario] = useState<'DEFAULT' | 'EMPTY'>('DEFAULT');
   const [reloadNotice, setReloadNotice] = useState<string | null>(null);
+
+  const deals = scenario === 'EMPTY' ? [] : INITIAL_DEALS;
 
   const isListView = searchParams.get('view') === 'list';
 
@@ -46,8 +48,26 @@ export const PipelinePage: React.FC = () => {
     navigate(`/quotation-builder/${quoteId}`);
   };
 
+  const handleNewQuotation = () => {
+    setActiveQuotationId(null);
+    navigate('/quotation-builder');
+  };
+
   return (
     <div className="page-container">
+      {/* Test Controls */}
+      <div style={{ padding: '8px 12px', background: 'rgba(255,255,255,0.05)', borderBottom: '1px solid var(--border-color)', marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <strong style={{ fontSize: '0.85rem' }}>Scenario:</strong>
+        <select 
+          value={scenario} 
+          onChange={e => setScenario(e.target.value as any)}
+          style={{ background: 'transparent', color: 'white', border: '1px solid var(--border-color)', padding: '4px', borderRadius: '4px', fontSize: '0.85rem' }}
+        >
+          <option value="DEFAULT" style={{ color: 'black' }}>Default (4 quotes)</option>
+          <option value="EMPTY" style={{ color: 'black' }}>Empty Pipeline</option>
+        </select>
+      </div>
+
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <div className="page-badge">
@@ -64,25 +84,37 @@ export const PipelinePage: React.FC = () => {
           </p>
         </div>
 
-        {/* View Toggle Switches */}
-        <div style={{ display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+        {/* View Toggle Switches and New Quote */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '4px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+            <button
+              type="button"
+              onClick={() => setSearchParams({ view: 'list' })}
+              className={`action-btn ${isListView ? 'action-btn-reload' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              <ListFilter size={14} />
+              <span>List View</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchParams({})}
+              className={`action-btn ${!isListView ? 'action-btn-reload' : ''}`}
+              style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            >
+              <LayoutGrid size={14} />
+              <span>Kanban View</span>
+            </button>
+          </div>
+          
           <button
             type="button"
-            onClick={() => setSearchParams({ view: 'list' })}
-            className={`action-btn ${isListView ? 'action-btn-reload' : ''}`}
-            style={{ fontSize: '0.8rem', padding: '6px 10px' }}
+            onClick={handleNewQuotation}
+            className="action-btn"
+            style={{ background: '#4f46e5', color: 'white', borderColor: '#4338ca', fontSize: '0.8rem', padding: '8px 12px', height: '100%' }}
           >
-            <ListFilter size={14} />
-            <span>List View</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSearchParams({})}
-            className={`action-btn ${!isListView ? 'action-btn-reload' : ''}`}
-            style={{ fontSize: '0.8rem', padding: '6px 10px' }}
-          >
-            <LayoutGrid size={14} />
-            <span>Kanban View</span>
+            <Plus size={14} />
+            <span>New Quotation</span>
           </button>
         </div>
       </div>
@@ -94,7 +126,29 @@ export const PipelinePage: React.FC = () => {
       )}
 
       {/* Content depending on view mode */}
-      {isListView ? (
+      {deals.length === 0 ? (
+        <div style={{ 
+          textAlign: 'center', 
+          padding: '64px 20px', 
+          background: 'var(--bg-secondary)', 
+          border: '1px dashed var(--border-color)',
+          borderRadius: '12px'
+        }}>
+          <h2 style={{ fontSize: '1.2rem', marginBottom: '8px' }}>Your Pipeline is Empty</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '0.9rem' }}>
+            There are currently no active quotations in your pipeline. Get started by creating your first quote.
+          </p>
+          <button
+            type="button"
+            onClick={handleNewQuotation}
+            className="action-btn"
+            style={{ background: '#4f46e5', color: 'white', borderColor: '#4338ca', fontSize: '0.9rem', padding: '10px 16px', margin: '0 auto' }}
+          >
+            <Plus size={16} />
+            <span>Create First Quotation</span>
+          </button>
+        </div>
+      ) : isListView ? (
         <div className="placeholder-card" style={{ padding: '0', overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between' }}>
             <h3 style={{ fontSize: '1rem', color: '#fff' }}>All Active Quotations</h3>
@@ -182,7 +236,7 @@ export const PipelinePage: React.FC = () => {
                   {stageDeals.map((deal) => (
                     <div 
                       key={deal.id}
-                      onClick={() => handleSelectQuote(deal.id)}
+                      onClick={() => handleOpenInBuilder(deal.id)}
                       style={{ 
                         background: activeQuotationId === deal.id ? 'rgba(99, 102, 241, 0.15)' : 'var(--bg-tertiary)',
                         border: activeQuotationId === deal.id ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid rgba(255,255,255,0.06)',

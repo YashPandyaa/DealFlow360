@@ -1,5 +1,8 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 
+import { useAuth } from '../auth/AuthContext';
+
+// We map AuthUser to User (or just use AuthUser properties)
 export interface User {
   id: string;
   name: string;
@@ -24,27 +27,16 @@ export interface WorkspaceContextType {
 export const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isLoadingUser, setIsLoadingUser] = useState<boolean>(true);
+  const { user } = useAuth();
+  
+  // No longer simulate loading user internally since AuthContext handles it,
+  // but we map AuthContext user directly to our WorkspaceContext currentUser
+  const currentUser = user as User | null;
+  const isLoadingUser = false; // Because ProtectedRoute already waits for AuthContext to load
   const [activeQuotationId, setActiveQuotationId] = useState<string | null>(null);
   const [isReloading, setIsReloading] = useState<boolean>(false);
   const [lastReloadedAt, setLastReloadedAt] = useState<Date | null>(null);
   const [reloadListeners] = useState<Set<() => Promise<void> | void>>(() => new Set());
-
-  // Simulate user profile resolution
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentUser({
-        id: 'usr_101',
-        name: 'Sarah Chen',
-        email: 'sarah.chen@dealflow.co',
-        role: 'Senior Account Executive',
-      });
-      setIsLoadingUser(false);
-    }, 250);
-
-    return () => clearTimeout(timer);
-  }, []);
 
   const registerReloadListener = useCallback((listener: () => Promise<void> | void) => {
     reloadListeners.add(listener);
