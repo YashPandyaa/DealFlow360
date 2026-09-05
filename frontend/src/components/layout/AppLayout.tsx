@@ -6,15 +6,23 @@ import {
   GitPullRequest, 
   FileSpreadsheet, 
   CheckCircle2, 
-  Layers
+  Layers,
+  PackageCheck,
+  CreditCard,
+  Globe,
+  BarChart3
 } from 'lucide-react';
 
 export const AppLayout: React.FC = () => {
   const navItems = [
     { to: '/workspace', label: 'Workspace', icon: LayoutDashboard },
+    { to: '/dashboard', label: 'Dashboard', icon: BarChart3 },
     { to: '/pipeline', label: 'Pipeline', icon: GitPullRequest },
     { to: '/quotation-builder', label: 'Quotation Builder', icon: FileSpreadsheet },
     { to: '/approval', label: 'Approval', icon: CheckCircle2 },
+    { to: '/fulfillment', label: 'Fulfillment', icon: PackageCheck },
+    { to: '/billing', label: 'Billing', icon: CreditCard },
+    { to: '/portal', label: 'Portal', icon: Globe },
     { to: '/auth', label: 'Auth', icon: Lock },
   ];
 
