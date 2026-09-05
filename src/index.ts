@@ -11,6 +11,7 @@ import { reportsRouter } from '../reports/reports.router';
 import { approvalsRouter } from '../approvals/approvals.router';
 import { productsRouter } from '../products/products.router';
 import { warehousesRouter } from '../warehouses/warehouses.router';
+import { quotationsRouter } from '../quotations/quotations.router';
 
 dotenv.config();
 
@@ -43,6 +44,10 @@ app.use('/backend/approvals', approvalsRouter);
 // Product Catalog Module Routes
 app.use('/products', productsRouter);
 app.use('/backend/products', productsRouter);
+
+// Core Quotation Management Routes
+app.use('/quotations', quotationsRouter);
+app.use('/backend/quotations', quotationsRouter);
 
 // Warehouse & Inventory Fulfillment Routes
 app.use('/warehouses', warehousesRouter);

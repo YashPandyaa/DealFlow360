@@ -48,6 +48,12 @@ export class ApprovalsService {
       throw err;
     }
 
+    if (!quotation.lines || quotation.lines.length === 0) {
+      const err = new Error('Cannot submit an empty quotation with no lines for approval');
+      (err as any).statusCode = 400;
+      throw err;
+    }
+
     const customerTier = tierOverride || quotation.customerTier || 'GOLD';
 
     const lines = quotation.lines.map((line) => ({
