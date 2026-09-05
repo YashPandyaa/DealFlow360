@@ -662,5 +662,315 @@ Looks up products currently in the quotation cart, retrieves matching pairing ru
     { "error": "Quotation not found" }
     ```
 
+---
+
+## Approval Workflow Engine Endpoints (`/approvals`, `/backend/approvals`)
+
+### 1. Submit Quotation for Approval
+**`POST /approvals/submit`**
+
+Submits a quotation for approval risk evaluation. Calls risk calculation internally. If no approval is required (`requiredApprovalChain` is null), marks the quote `READY_FOR_FULFILLMENT` and logs an audit log entry. If approval is required, creates an `ApprovalRequest` with `currentStep: "MANAGER"` and updates quote status to `PENDING_APPROVAL`.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "quotationId": "quote-uuid-123",
+    "customerTier": "GOLD"
+  }
+  ```
+
+- **Response `200 OK` (Approval Required)**:
+  ```json
+  {
+    "requiresApproval": true,
+    "approvalRequestId": "req-uuid-456",
+    "currentStep": "MANAGER"
+  }
+  ```
+
+- **Response `200 OK` (Auto-Approved / No Approval Required)**:
+  ```json
+  {
+    "requiresApproval": false
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: Missing `quotationId`.
+  - `404 Not Found`: Quotation not found.
+
+---
+
+### 2. Process Approval Action
+**`POST /approvals/:id/action`**
+
+Approves, rejects, or returns an approval request for revision. Role matching `currentStep` is enforced. Updates `ApprovalRequest` status, advances multi-step chains (`MANAGER` -> `FINANCE`), logs an `ApprovalStepRecord`, and creates a compliance `AuditLog` entry.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "action": "APPROVED",
+    "reason": "Discount overage is within acceptable margin threshold"
+  }
+  ```
+  *Allowed `action` values*: `APPROVED`, `REJECTED`, `RETURNED_FOR_REVISION`
+
+- **Response `200 OK` (Step Advanced)**:
+  ```json
+  {
+    "id": "req-uuid-456",
+    "quotationId": "quote-uuid-123",
+    "blendedRiskScore": 7.5,
+    "requiredApprovers": "MANAGER_THEN_FINANCE",
+    "currentStep": "FINANCE",
+    "status": "PENDING",
+    "stepRecords": [
+      {
+        "id": "step-uuid-1",
+        "approverRole": "MANAGER",
+        "approverId": "user-manager-id",
+        "action": "APPROVED",
+        "reason": "Discount overage is within acceptable margin threshold",
+        "createdAt": "2026-09-05T12:05:00.000Z"
+      }
+    ]
+  }
+  ```
+
+- **Response `200 OK` (Final Approval Completed)**:
+  ```json
+  {
+    "id": "req-uuid-456",
+    "quotationId": "quote-uuid-123",
+    "currentStep": "COMPLETED",
+    "status": "APPROVED"
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: Invalid action or missing reason for `REJECTED`/`RETURNED_FOR_REVISION`.
+  - `403 Forbidden`: User role does not match `currentStep`.
+  - `409 Conflict`: Request is already completed/rejected or concurrent action collision.
+
+---
+
+### 3. Reopen Approval (On Re-Negotiation)
+**`POST /approvals/:quotationId/reopen`**
+
+Internal endpoint called when a negotiated counter-offer changes quotation terms. Re-evaluates risk score. If approval threshold is exceeded, creates a fresh `ApprovalRequest` regardless of previous approval status, and logs a negotiation audit entry.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerTier": "GOLD"
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "requiresApproval": true,
+    "approvalRequestId": "new-req-uuid-789",
+    "currentStep": "MANAGER"
+  }
+  ```
+
+---
+
+### 4. Approval History Audit Trail
+**`GET /approvals/:quotationId/history`**
+
+Fetches all `ApprovalStepRecord`s and compliance `AuditLog` entries for a quotation ordered chronologically.
+
+- **Headers**: `Authorization: Bearer <JWT>`
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotationId": "quote-uuid-123",
+    "approvalRequests": [
+      {
+        "id": "req-uuid-456",
+        "blendedRiskScore": 7.5,
+        "requiredApprovers": "MANAGER_THEN_FINANCE",
+        "currentStep": "COMPLETED",
+        "status": "APPROVED",
+        "stepRecords": []
+      }
+    ],
+    "stepRecords": [],
+    "auditLogs": []
+  }
+  ```
+
+---
+
+## Reporting & Deal Health Analytics Endpoints (`/reports`, `/backend/reports`)
+
+### 1. Filtered Quotations Report
+**`GET /reports/quotations`**
+
+Retrieves a paginated and filtered list of quotations matching all provided criteria (`AND` logic).
+
+- **Query Parameters**:
+  - `from` *(optional, ISO Date String)*: Start creation date filter.
+  - `to` *(optional, ISO Date String)*: End creation date filter.
+  - `salesRepId` *(optional, String)*: Filter by Sales Rep user ID.
+  - `teamId` *(optional, String)*: Filter by Sales Rep team ID.
+  - `approvalStatus` or `status` *(optional, String)*: Filter by quotation status (`DRAFT`, `SUBMITTED`, `ACCEPTED`, `REJECTED`, etc.).
+  - `category` *(optional, String)*: Filter quotations containing products of this category.
+  - `page` *(optional, Integer, default `1`)*: Page number.
+  - `limit` *(optional, Integer, default `20`)*: Page size (max `100`).
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotations": [
+      {
+        "id": "quote-uuid-001",
+        "quoteNumber": "QT-2026-001",
+        "userId": "user-uuid-123",
+        "salesRep": {
+          "id": "user-uuid-123",
+          "name": "Jane Doe",
+          "email": "jane@dealflow360.com",
+          "teamId": "ENTERPRISE-EAST"
+        },
+        "customerName": "Acme Corp",
+        "status": "ACCEPTED",
+        "totalAmount": 15000.00,
+        "linesCount": 2,
+        "lines": [
+          {
+            "id": "line-1",
+            "productId": "prod-1",
+            "productName": "Enterprise Server Node",
+            "category": "Hardware",
+            "quantity": 5,
+            "unitPrice": 3000.00,
+            "discount": 0,
+            "totalPrice": 15000.00
+          }
+        ],
+        "targetDeliveryDate": "2026-10-01T00:00:00.000Z",
+        "actualDeliveryDate": null,
+        "createdAt": "2026-09-01T10:00:00.000Z",
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      }
+    ],
+    "totalCount": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1
+  }
+  ```
+
+---
+
+### 2. Export Quotation Report
+**`GET /reports/export`**
+
+Exports the filtered quotation report directly into downloadable file format.
+
+- **Query Parameters**: Same filters as `/reports/quotations` + `format=pdf|xlsx|csv` (default `pdf`).
+- **Response Headers**:
+  - For PDF: `Content-Type: application/pdf`, `Content-Disposition: attachment; filename="quotations-report.pdf"`
+  - For XLSX: `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `Content-Disposition: attachment; filename="quotations-report.xlsx"`
+  - For CSV: `Content-Type: text/csv`, `Content-Disposition: attachment; filename="quotations-report.csv"`
+- **Response**: Binary file stream or CSV text stream.
+- **Edge Case**: If the filtered query returns 0 rows, generates a valid file containing table headers without erroring.
+
+---
+
+### 3. Deal Health Dashboard Analytics
+**`GET /reports/deal-health`**
+
+Aggregates operational deal health metrics across all active quotations.
+
+- **Query Parameters**:
+  - `stalledDays` *(optional, Integer, default `5`)*: Inactivity threshold in days for non-terminal deals.
+  - `discountAnomalyMultiplier` *(optional, Float, default `1.5`)*: Anomaly threshold multiplier above rep's historical average.
+  - `minHistoryFloor` *(optional, Integer, default `3`)*: Minimum deals required before evaluating anomaly detection.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "stalledDeals": [
+      {
+        "quotationId": "quote-uuid-stalled",
+        "quoteNumber": "QT-2026-STALLED",
+        "customerName": "Stalled Prospect Inc",
+        "salesRepId": "user-uuid-bob",
+        "salesRepName": "Bob Smith",
+        "status": "DRAFT",
+        "daysInactive": 9,
+        "updatedAt": "2026-08-27T10:00:00.000Z",
+        "totalAmount": 5000.00
+      }
+    ],
+    "discountAnomalies": [
+      {
+        "quotationId": "quote-uuid-anomaly",
+        "quoteNumber": "QT-2026-ANOMALY",
+        "customerName": "Large Discount Corp",
+        "salesRepId": "user-uuid-bob",
+        "salesRepName": "Bob Smith",
+        "status": "SUBMITTED",
+        "discountPercent": 30.00,
+        "repAvgDiscount": 10.00,
+        "anomalyRatio": 3.00,
+        "totalAmount": 1400.00,
+        "createdAt": "2026-09-05T11:00:00.000Z"
+      }
+    ],
+    "deliverySlippage": [
+      {
+        "quotationId": "quote-uuid-slipped",
+        "quoteNumber": "QT-2026-SLIPPED",
+        "customerName": "Delayed Delivery Corp",
+        "salesRepName": "Alice Wonder",
+        "status": "ACCEPTED",
+        "daysSlipped": 4,
+        "targetDeliveryDate": "2026-09-01T00:00:00.000Z",
+        "actualDeliveryDate": null,
+        "totalAmount": 3500.00
+      }
+    ]
+  }
+  ```
+
+---
+
+### 4. Deal Health Nudge Escalation
+**`POST /reports/deal-health/:quotationId/nudge`**
+
+Triggers an escalation nudge action for a stalled deal or anomaly by logging an `AuditLog` entry.
+
+- **Request Body**:
+  ```json
+  {
+    "message": "Please follow up with customer regarding pending approval",
+    "escalationType": "MANAGER_ESCALATION",
+    "targetRole": "MANAGER"
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "success": true,
+    "message": "Nudge escalation sent successfully for quotation QT-2026-STALLED",
+    "quotationId": "quote-uuid-stalled",
+    "quoteNumber": "QT-2026-STALLED",
+    "actionId": "audit-log-uuid-456",
+    "timestamp": "2026-09-05T14:40:00.000Z"
+  }
+  ```
+
+
+
 
 
