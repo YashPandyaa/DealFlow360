@@ -157,3 +157,250 @@ Validates magic link token, marks it as used, and issues a 8-hour JWT token scop
 ### `requireRole(allowedRoles: string[])`
 - Checks `req.user.role` against `allowedRoles`.
 - **Status Codes**: Returns `403 Forbidden` if role is not permitted (e.g. `CUSTOMER` token accessing internal routes).
+
+---
+
+## Subscription & Hybrid Billing Endpoints (`/subscriptions`, `/orders`)
+
+### 1. Subscription Plans CRUD
+**`POST /subscriptions/plans`** *(Admin Only)*
+
+Creates a recurring subscription plan.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "name": "Pro SaaS Monthly",
+    "billingCycle": "MONTHLY",
+    "productId": "optional-product-uuid",
+    "pricePerCycle": 150.00
+  }
+  ```
+  *Allowed `billingCycle` values*: `MONTHLY`, `QUARTERLY`, `YEARLY`
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "7fa12345-6789-4abc-def0-123456789abc",
+    "name": "Pro SaaS Monthly",
+    "billingCycle": "MONTHLY",
+    "productId": "optional-product-uuid",
+    "pricePerCycle": 150.00,
+    "isActive": true,
+    "createdAt": "2026-09-05T11:00:00.000Z",
+    "updatedAt": "2026-09-05T11:00:00.000Z"
+  }
+  ```
+
+- **Related Plan Routes**:
+  - `GET /subscriptions/plans` (Lists active plans; `?includeInactive=true` for all)
+  - `GET /subscriptions/plans/:id` (Get plan by ID)
+  - `PUT /subscriptions/plans/:id` (Update plan, Admin only)
+  - `DELETE /subscriptions/plans/:id` (Deactivate plan, Admin only)
+
+---
+
+### 2. Create Subscription
+**`POST /subscriptions`**
+
+Creates a subscription and automatically generates the first N (e.g. 12) cycles in `BillingScheduleEntry`.
+
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "quotationId": "quote-uuid-123",
+    "planId": "7fa12345-6789-4abc-def0-123456789abc",
+    "quantity": 2,
+    "startDate": "2026-01-01T00:00:00.000Z",
+    "cyclesToGenerate": 12
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "sub-uuid-456",
+    "quotationId": "quote-uuid-123",
+    "planId": "7fa12345-6789-4abc-def0-123456789abc",
+    "quantity": 2,
+    "startDate": "2026-01-01T00:00:00.000Z",
+    "status": "ACTIVE",
+    "currentPeriodStart": "2026-01-01T00:00:00.000Z",
+    "currentPeriodEnd": "2026-02-01T00:00:00.000Z",
+    "billingScheduleEntries": [
+      {
+        "id": "bse-1",
+        "billingDate": "2026-01-01T00:00:00.000Z",
+        "amount": 300.00,
+        "status": "INVOICED",
+        "description": "Billing Cycle 1 (MONTHLY)"
+      },
+      {
+        "id": "bse-2",
+        "billingDate": "2026-02-01T00:00:00.000Z",
+        "amount": 300.00,
+        "status": "UPCOMING",
+        "description": "Billing Cycle 2 (MONTHLY)"
+      }
+    ]
+  }
+  ```
+
+---
+
+### 3. Update Subscription Quantity with Proration
+**`PATCH /subscriptions/:id/quantity`**
+
+Calculates mid-cycle proration when quantity increases or decreases.
+
+- **Proration Formula**:
+  $$\text{Prorated Amount} = (\text{newQuantity} - \text{oldQuantity}) \times \text{pricePerUnit} \times \left(\frac{\text{daysRemaining}}{\text{totalDaysInCycle}}\right)$$
+  - **Quantity Increase**: Creates immediate `BillingScheduleEntry` with `status: INVOICED` and updates future entries.
+  - **Quantity Decrease**: Creates a `CreditNote` for prorated overpayment and updates future entries without producing negative invoices.
+
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "newQuantity": 4,
+    "effectiveDate": "2026-01-11T00:00:00.000Z"
+  }
+  ```
+
+- **Response `200 OK` (Increase)**:
+  ```json
+  {
+    "subscription": {
+      "id": "sub-uuid-456",
+      "quantity": 4,
+      "status": "ACTIVE"
+    },
+    "oldQuantity": 2,
+    "newQuantity": 4,
+    "daysRemaining": 20,
+    "totalDaysInCycle": 30,
+    "proratedAmount": 200.00,
+    "action": "CHARGE",
+    "immediateEntry": {
+      "id": "entry-prorated-1",
+      "billingDate": "2026-01-11T00:00:00.000Z",
+      "amount": 200.00,
+      "status": "INVOICED",
+      "description": "Prorated charge: quantity increased from 2 to 4 (20/30 days remaining)"
+    }
+  }
+  ```
+
+- **Response `200 OK` (Decrease)**:
+  ```json
+  {
+    "subscription": {
+      "id": "sub-uuid-456",
+      "quantity": 2,
+      "status": "ACTIVE"
+    },
+    "oldQuantity": 4,
+    "newQuantity": 2,
+    "daysRemaining": 20,
+    "totalDaysInCycle": 30,
+    "proratedAmount": -200.00,
+    "action": "CREDIT",
+    "creditNote": {
+      "id": "credit-uuid-789",
+      "amount": 200.00,
+      "reason": "Prorated credit for quantity decrease from 4 to 2 (20/30 days remaining)"
+    }
+  }
+  ```
+
+---
+
+### 4. Cancel Subscription
+**`POST /subscriptions/:id/cancel`**
+
+Cancels subscription mid-cycle, calculates refund for unused days, issues `CreditNote`, and voids future scheduled entries.
+
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "effectiveDate": "2026-01-16T00:00:00.000Z",
+    "reason": "Customer migration"
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "subscription": {
+      "id": "sub-uuid-456",
+      "status": "CANCELLED"
+    },
+    "creditNote": {
+      "id": "credit-uuid-999",
+      "amount": 100.00,
+      "reason": "Customer migration"
+    },
+    "unusedCredit": 100.00,
+    "daysRemaining": 15,
+    "totalDaysInCycle": 30,
+    "message": "Subscription cancelled successfully"
+  }
+  ```
+
+---
+
+### 5. Hybrid Order Combined Invoice
+**`GET /orders/:orderId/invoice`** (also `GET /subscriptions/orders/:orderId/invoice`)
+
+Aggregates one-time `QuotationLines` and recurring `Subscriptions`. One-time and recurring totals are distinctly separated in the response.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "orderId": "quote-uuid-123",
+    "quoteNumber": "QT-2026-001",
+    "oneTimeTotal": 1000.00,
+    "recurringTotal": 300.00,
+    "combinedInvoiceTotal": 1300.00,
+    "quotationLines": [
+      {
+        "id": "line-1",
+        "productId": "prod-1",
+        "productName": "IoT Gateway Hardware",
+        "quantity": 2,
+        "unitPrice": 500.00,
+        "discount": 0,
+        "totalPrice": 1000.00
+      }
+    ],
+    "subscriptions": [
+      {
+        "id": "sub-1",
+        "planName": "Cloud Connectivity SaaS",
+        "billingCycle": "MONTHLY",
+        "pricePerCycle": 150.00,
+        "quantity": 2,
+        "cycleTotal": 300.00,
+        "status": "ACTIVE",
+        "currentPeriodStart": "2026-01-01T00:00:00.000Z",
+        "currentPeriodEnd": "2026-02-01T00:00:00.000Z"
+      }
+    ],
+    "upcomingSchedule": [
+      {
+        "id": "bse-2",
+        "subscriptionId": "sub-1",
+        "planName": "Cloud Connectivity SaaS",
+        "billingDate": "2026-02-01T00:00:00.000Z",
+        "amount": 300.00,
+        "status": "UPCOMING",
+        "description": "Billing Cycle 2 (MONTHLY)"
+      }
+    ],
+    "creditNotes": []
+  }
+  ```
+
