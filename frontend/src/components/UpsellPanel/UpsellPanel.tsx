@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../../utils/api';
 import './UpsellPanel.css';
 
 // PROPS INTERFACE
@@ -36,15 +37,15 @@ export default function UpsellPanel({ quotationId, onAdd, onDismiss }: UpsellPan
       setError(null);
       
       try {
-        // Simulate network delay for Dev B's endpoint
-        await new Promise(resolve => setTimeout(resolve, 600));
-        
-        // Mock data since backend is not connected
-        const data = [
-          { productId: 'hw-3', name: 'Wifi 6 Access Point', marginDelta: 45, isPromoted: true },
-          { productId: 'sub-2', name: 'Advanced Threat Protection', marginDelta: 120, isPromoted: false },
-          { productId: 'svc-2', name: 'Network Audit', marginDelta: -10, isPromoted: false }
-        ];
+        const response = await apiFetch(`/upsell/${quotationId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch upsell suggestions');
+        }
+        const rawData = await response.json();
+        const data = rawData.map((item: any) => ({
+          ...item,
+          name: item.productName || item.name
+        }));
         
         if (isMounted) {
           setSuggestions(data);

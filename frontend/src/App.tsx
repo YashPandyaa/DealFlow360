@@ -55,11 +55,11 @@ function App() {
                 <Route path="quotation-builder/:id" element={<QuotationBuilderPage />} />
                 <Route path="approval" element={<ApprovalPage />} />
                 <Route path="dashboard" element={<DashboardPage />} />
+                <Route path="fulfillment" element={<FulfillmentPage />} />
+                <Route path="billing" element={<BillingPage />} />
               </Route>
 
               {/* Standalone Management / Backend Routes */}
-              <Route path="fulfillment" element={<FulfillmentPage />} />
-              <Route path="billing" element={<BillingPage />} />
             </Route>
             
             <Route path="*" element={<Navigate to="/pipeline" replace />} />

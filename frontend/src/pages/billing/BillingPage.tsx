@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Receipt, Package, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Receipt, Package, Calendar, AlertTriangle } from 'lucide-react';
+import { useWorkspace } from '../workspace';
+import { apiFetch } from '../../utils/api';
 import './Billing.css';
 
 type BillingCycle = 'MONTHLY' | 'ANNUAL';
@@ -22,37 +24,12 @@ interface Invoice {
   items: InvoiceItem[];
 }
 
-// --- MOCK DATA ---
-const MOCK_SCENARIOS: Record<string, Invoice> = {
-  mixed: {
-    orderId: 'ORD-5009-MIX',
-    items: [
-      { id: 'hw-1', name: 'Enterprise Firewall Appliance', type: 'ONE_TIME', status: 'ACTIVE', quantity: 2, unitPrice: 2400 },
-      { id: 'svc-1', name: 'Professional Implementation', type: 'ONE_TIME', status: 'ACTIVE', quantity: 1, unitPrice: 1500 },
-      { id: 'sub-1', name: 'Advanced Threat Protection', type: 'RECURRING', status: 'ACTIVE', quantity: 1, unitPrice: 600, cycle: 'MONTHLY', upcomingDates: ['Oct 1, 2026', 'Nov 1, 2026', 'Dec 1, 2026'] },
-      { id: 'sub-2', name: '24/7 Priority Support', type: 'RECURRING', status: 'ACTIVE', quantity: 1, unitPrice: 300, cycle: 'MONTHLY', upcomingDates: ['Oct 1, 2026', 'Nov 1, 2026', 'Dec 1, 2026'] }
-    ]
-  },
-  onlyOneTime: {
-    orderId: 'ORD-5010-ONE',
-    items: [
-      { id: 'hw-1', name: 'Enterprise Firewall Appliance', type: 'ONE_TIME', status: 'ACTIVE', quantity: 4, unitPrice: 2400 },
-      { id: 'hw-2', name: 'Wifi 6 Access Points', type: 'ONE_TIME', status: 'ACTIVE', quantity: 15, unitPrice: 350 },
-      { id: 'svc-1', name: 'Network Audit', type: 'ONE_TIME', status: 'ACTIVE', quantity: 1, unitPrice: 2000 }
-    ]
-  },
-  onlySubs: {
-    orderId: 'ORD-5011-SUB',
-    items: [
-      { id: 'sub-1', name: 'Advanced Threat Protection', type: 'RECURRING', status: 'ACTIVE', quantity: 10, unitPrice: 600, cycle: 'MONTHLY', upcomingDates: ['Oct 1, 2026', 'Nov 1, 2026', 'Dec 1, 2026'] },
-      { id: 'sub-3', name: 'Cloud Backup Storage (TB)', type: 'RECURRING', status: 'ACTIVE', quantity: 50, unitPrice: 40, cycle: 'MONTHLY', upcomingDates: ['Oct 1, 2026', 'Nov 1, 2026', 'Dec 1, 2026'] }
-    ]
-  }
-};
-
 export const BillingPage: React.FC = () => {
-  const [activeScenario, setActiveScenario] = useState<string>('mixed');
-  const [data, setData] = useState<Invoice>(MOCK_SCENARIOS.mixed);
+  const { registerReloadListener, activeQuotationId } = useWorkspace();
+  
+  const [data, setData] = useState<Invoice | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // UI States
   const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({});
@@ -60,14 +37,62 @@ export const BillingPage: React.FC = () => {
   const [cancelStateId, setCancelStateId] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
 
-  // Switch scenario
+  const fetchInvoiceData = useCallback(async () => {
+    if (!activeQuotationId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/orders/${activeQuotationId}/invoice`);
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to fetch invoice data.');
+      }
+      const jsonData = await res.json();
+      setData(jsonData);
+      setIsProcessing({});
+      setProrationMsgs({});
+      setCancelStateId(null);
+      setCancelReason('');
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeQuotationId]);
+
   useEffect(() => {
-    setData(JSON.parse(JSON.stringify(MOCK_SCENARIOS[activeScenario])));
-    setIsProcessing({});
-    setProrationMsgs({});
-    setCancelStateId(null);
-    setCancelReason('');
-  }, [activeScenario]);
+    fetchInvoiceData();
+    const unregister = registerReloadListener(fetchInvoiceData);
+    return () => unregister();
+  }, [fetchInvoiceData, registerReloadListener]);
+
+  if (!activeQuotationId) {
+    return (
+      <div className="page-container bill-container">
+        <div className="ff-banner ff-banner-error" style={{ padding: '32px', textAlign: 'center', marginBottom: 0 }}>
+          <h3>No Quotation Selected</h3>
+          <p>Please select a quotation or order from the pipeline to view its billing details.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (loading && !data) {
+    return <div className="page-container bill-container"><p>Loading invoice data...</p></div>;
+  }
+
+  if (error) {
+    return (
+      <div className="page-container bill-container">
+        <div className="ff-banner ff-banner-error">
+          <AlertTriangle size={20} />
+          <span><strong>Error:</strong> {error}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   // Derived arrays
   const oneTimeItems = data.items.filter(i => i.type === 'ONE_TIME');
@@ -75,7 +100,6 @@ export const BillingPage: React.FC = () => {
 
   // Math
   const oneTimeSubtotal = oneTimeItems.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-  // Recurring subtotal only counts active items
   const recurringSubtotal = recurringItems
     .filter(i => i.status === 'ACTIVE')
     .reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
@@ -87,77 +111,85 @@ export const BillingPage: React.FC = () => {
     if (newQty < 1 || isNaN(newQty)) return;
     const item = data.items.find(i => i.id === id);
     if (!item) return;
-
-    if (item.quantity === newQty) return; // no change
+    if (item.quantity === newQty) return; 
 
     const delta = newQty - item.quantity;
-    
     setIsProcessing(prev => ({ ...prev, [id]: true }));
     
-    // Simulate Backend Dev B's proration API response
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      const res = await apiFetch(`/subscriptions/${id}/quantity`, {
+        method: 'PATCH',
+        body: JSON.stringify({ newQuantity: newQty, effectiveDate: new Date().toISOString() })
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to update quantity');
+      }
+      
+      const result = await res.json();
+      
+      const prorationCharge = result.proratedAmount;
+      const newMonthlyTotal = newQty * item.unitPrice;
 
-    // Demo target logic: "10-day/doubling example -> $200"
-    let prorationCharge = 0;
-    if (item.name.includes("Threat") && newQty === item.quantity * 2) {
-      prorationCharge = 200; 
-    } else {
-      // Generic mock math for other items (roughly 1/3 of the monthly diff)
-      prorationCharge = Math.round(delta * item.unitPrice * 0.33);
+      setData(prev => {
+         if (!prev) return prev;
+         const next = { ...prev, items: [...prev.items] };
+         const idx = next.items.findIndex(i => i.id === id);
+         next.items[idx] = { ...next.items[idx], quantity: newQty };
+         return next;
+      });
+
+      setProrationMsgs(prev => ({
+         ...prev,
+         [id]: `Quantity change: ${delta > 0 ? '+' : ''}${delta} units → $${Math.abs(prorationCharge)} prorated ${prorationCharge >= 0 ? 'charge' : 'credit'} today, new monthly total: $${newMonthlyTotal.toLocaleString()} starting next cycle`
+      }));
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsProcessing(prev => ({ ...prev, [id]: false }));
     }
-    
-    const newMonthlyTotal = newQty * item.unitPrice;
-
-    setData(prev => {
-       const next = { ...prev, items: [...prev.items] };
-       const idx = next.items.findIndex(i => i.id === id);
-       next.items[idx] = { ...next.items[idx], quantity: newQty };
-       return next;
-    });
-
-    setProrationMsgs(prev => ({
-       ...prev,
-       [id]: `Quantity change: ${delta > 0 ? '+' : ''}${delta} units → $${Math.abs(prorationCharge)} prorated ${prorationCharge >= 0 ? 'charge' : 'credit'} today, new monthly total: $${newMonthlyTotal.toLocaleString()} starting next cycle`
-    }));
-
-    setIsProcessing(prev => ({ ...prev, [id]: false }));
   };
 
   const submitCancel = async (id: string) => {
     setIsProcessing(prev => ({ ...prev, [id]: true }));
     
-    // Simulate Backend Dev B's cancellation endpoint
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setData(prev => {
-       const next = { ...prev, items: [...prev.items] };
-       const idx = next.items.findIndex(i => i.id === id);
-       next.items[idx] = { 
-         ...next.items[idx], 
-         status: 'CANCELLED', 
-         cancelReason: cancelReason,
-         // Hardcoded Demo target logic: $150 credit note
-         creditNoteMsg: `Credit note issued: $150 for 20 unused days`
-       };
-       return next;
-    });
-
-    setIsProcessing(prev => ({ ...prev, [id]: false }));
-    setCancelStateId(null);
-    setCancelReason('');
+    try {
+      const res = await apiFetch(`/subscriptions/${id}/cancel`, {
+        method: 'POST',
+        body: JSON.stringify({ effectiveDate: new Date().toISOString(), reason: cancelReason })
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Failed to cancel subscription');
+      }
+      
+      const result = await res.json();
+      
+      setData(prev => {
+         if (!prev) return prev;
+         const next = { ...prev, items: [...prev.items] };
+         const idx = next.items.findIndex(i => i.id === id);
+         next.items[idx] = { 
+           ...next.items[idx], 
+           status: 'CANCELLED', 
+           cancelReason: cancelReason,
+           creditNoteMsg: `Credit note issued: $${result.creditAmount} for unused days`
+         };
+         return next;
+      });
+      setCancelStateId(null);
+      setCancelReason('');
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsProcessing(prev => ({ ...prev, [id]: false }));
+    }
   };
 
   return (
     <div className="page-container bill-container">
-      <div className="bill-test-controls">
-        <div className="bill-test-group">
-          <strong>Scenario:</strong>
-          <select className="bill-select" value={activeScenario} onChange={e => setActiveScenario(e.target.value)}>
-            {Object.keys(MOCK_SCENARIOS).map(k => <option key={k} value={k}>{k}</option>)}
-          </select>
-        </div>
-      </div>
-
       <div className="page-header" style={{ marginBottom: 0 }}>
         <div>
           <div className="page-badge">

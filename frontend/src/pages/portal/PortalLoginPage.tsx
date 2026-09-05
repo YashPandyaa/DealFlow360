@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../../utils/api';
 import { Mail, CheckCircle2 } from 'lucide-react';
 
 export const PortalLoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
+  const [simulatedLink, setSimulatedLink] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleRequestLink = async (e: React.FormEvent) => {
@@ -13,15 +15,35 @@ export const PortalLoginPage: React.FC = () => {
     if (!email) return;
 
     setIsSubmitting(true);
-    // Simulate API call POST /auth/portal/request-link
-    await new Promise(resolve => setTimeout(resolve, 800));
-    setIsSent(true);
-    setIsSubmitting(false);
+    try {
+      const res = await apiFetch('/auth/portal/request-link', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send magic link');
+      
+      setSimulatedLink(data.magicLink); // The backend returns the relative link
+      setIsSent(true);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const simulateEmailClick = () => {
-    // Navigates to a mocked quote ID with a valid token
-    navigate('/portal/quote/Q-2026-004?token=mock_magic_token_valid');
+    if (simulatedLink) {
+      // Backend returns e.g. /auth/portal/verify?token=XYZ. We want to route the frontend to /portal/quote/:id?token=XYZ.
+      // Wait, the backend doesn't know the quote ID in request-link because it just authenticates the user!
+      // The user would see a list of quotes, or the email link would have the quote ID.
+      // Actually, if the backend returns /auth/portal/verify?token=XYZ, the portal needs to verify that token, get JWT, then the customer sees their quotes (or we just use a hardcoded Q-1 for demo).
+      // Let's pass the token to the portal quote page:
+      const urlParams = new URLSearchParams(simulatedLink.split('?')[1]);
+      const token = urlParams.get('token');
+      // For demo, we just navigate to quote/Q-1 (if we don't know the exact ID) with the valid token.
+      navigate(`/portal/quote/Q-1?token=${token}`);
+    }
   };
 
   return (

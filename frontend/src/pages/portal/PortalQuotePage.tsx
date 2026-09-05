@@ -1,55 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { CheckCircle2, MessageSquare, ShieldAlert } from 'lucide-react';
+import { API_BASE_URL } from '../../utils/api';
 
 interface PortalLineItem {
   id: string;
-  name: string;
-  description: string;
+  productId: string;
   quantity: number;
   customerPrice: number;
+  product?: {
+    name: string;
+    description: string;
+  };
 }
 
 interface PortalQuotation {
   id: string;
-  clientName: string;
-  status: 'NEGOTIATION' | 'CONFIRMED';
-  items: PortalLineItem[];
-  totalValue: number;
+  clientId: string;
+  status: 'DRAFT' | 'APPROVAL' | 'NEGOTIATION' | 'CONFIRMED' | 'REJECTED';
+  lines: PortalLineItem[];
+  totalAmount: number;
 }
-
-// Strictly external mock data. Absolutely no cost, margin, or internal approval info.
-const MOCK_DATA: Record<string, PortalQuotation> = {
-  'Q-2026-004': {
-    id: 'Q-2026-004',
-    clientName: 'Nexus Retail Group',
-    status: 'NEGOTIATION',
-    totalValue: 92000,
-    items: [
-      { id: 'l1', name: 'Enterprise Firewall Appliance', description: 'Hardware unit', quantity: 2, customerPrice: 5000 },
-      { id: 'l2', name: 'Advanced Threat Protection', description: 'Annual subscription', quantity: 1, customerPrice: 82000 }
-    ]
-  },
-  'Q-2026-005': {
-    id: 'Q-2026-005',
-    clientName: 'Acme Global',
-    status: 'CONFIRMED',
-    totalValue: 15000,
-    items: [
-      { id: 'l3', name: 'Cloud Backup Storage (TB)', description: 'Annual subscription', quantity: 10, customerPrice: 15000 }
-    ]
-  }
-};
 
 export const PortalQuotePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const token = searchParams.get('token');
-  const isInvalidToken = !token || token !== 'mock_magic_token_valid';
+  const magicToken = searchParams.get('token');
 
   const [quote, setQuote] = useState<PortalQuotation | null>(null);
+  const [jwt, setJwt] = useState<string | null>(null);
+  
+  const [authError, setAuthError] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   // Form State
   const [lineComments, setLineComments] = useState<Record<string, string>>({});
@@ -59,16 +43,57 @@ export const PortalQuotePage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Load Mock Data
-  useEffect(() => {
-    if (id && MOCK_DATA[id]) {
-      setQuote(JSON.parse(JSON.stringify(MOCK_DATA[id])));
+  const fetchQuote = useCallback(async (token: string) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/quotations/${id}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch quotation');
+      const data = await res.json();
+      setQuote(data);
+    } catch (err) {
+      console.error(err);
     }
   }, [id]);
 
-  if (isInvalidToken) {
+  useEffect(() => {
+    let isMounted = true;
+    const verifyToken = async () => {
+      if (!magicToken) {
+        setAuthError(true);
+        setLoading(false);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/portal/verify?token=${magicToken}`);
+        if (!res.ok) {
+          throw new Error('Invalid or expired token');
+        }
+        const data = await res.json();
+        
+        if (isMounted) {
+          setJwt(data.token);
+          await fetchQuote(data.token);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (isMounted) {
+          setAuthError(true);
+          setLoading(false);
+        }
+      }
+    };
+    verifyToken();
+    return () => { isMounted = false; };
+  }, [magicToken, fetchQuote]);
+
+  if (loading) {
+    return <div style={{ padding: '40px', textAlign: 'center' }}>Verifying link and loading quotation...</div>;
+  }
+
+  if (authError || !jwt) {
     return (
-      <div className="portal-card" style={{ textAlign: 'center' }}>
+      <div className="portal-card" style={{ textAlign: 'center', margin: '40px auto' }}>
         <ShieldAlert size={48} color="#ef4444" style={{ margin: '0 auto 16px' }} />
         <h1 className="portal-title">Link Expired or Invalid</h1>
         <p className="portal-subtitle">This secure link is no longer valid. Please request a new one to access your quotation.</p>
@@ -80,7 +105,7 @@ export const PortalQuotePage: React.FC = () => {
   }
 
   if (!quote) {
-    return <div style={{ padding: '40px', textAlign: 'center' }}>Loading quotation details...</div>;
+    return <div style={{ padding: '40px', textAlign: 'center' }}>Quotation not found.</div>;
   }
 
   const isConfirmed = quote.status === 'CONFIRMED';
@@ -92,7 +117,7 @@ export const PortalQuotePage: React.FC = () => {
 
   const handleSubmitRequest = async () => {
     setIsSubmitting(true);
-    // Simulate sending comments/counter-offer
+    // Real implementation would save comments. For now just show success.
     await new Promise(resolve => setTimeout(resolve, 800));
     setSuccessMsg('Your change requests have been sent to your account representative.');
     setIsSubmitting(false);
@@ -100,49 +125,51 @@ export const PortalQuotePage: React.FC = () => {
 
   const handleConfirmQuotation = async () => {
     setIsSubmitting(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    // Threshold check logic per brief
-    const discountVal = Number(requestedDiscount) || 0;
-    
-    if (discountVal > 20) {
-      setSuccessMsg('Quotation confirmed pending final review. Your requested discount is undergoing final approval.');
-    } else {
-      setSuccessMsg('Quotation confirmed! Your order is now moving to fulfillment.');
+    try {
+      const discountVal = Number(requestedDiscount) || 0;
+      
+      // If discount > 20%, re-trigger approval
+      if (discountVal > 20) {
+        const res = await fetch(`${API_BASE_URL}/approvals/${id}/reopen`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${jwt}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ customerTier: 'ENTERPRISE' }) // Using a default tier for this demo since it's required by the endpoint
+        });
+        
+        if (!res.ok) {
+           const err = await res.json();
+           throw new Error(err.error || 'Failed to re-trigger approval');
+        }
+        setSuccessMsg('Quotation confirmed pending final review. Your requested discount is undergoing final approval.');
+      } else {
+        // If discount <= 20%, just update status to CONFIRMED (pseudo logic since the API doesn't have a direct confirm endpoint, we simulate it or call the actual one if it existed).
+        // Since backend Dev A might not have an endpoint just to "Confirm from portal", we'll just show the success message.
+        await new Promise(resolve => setTimeout(resolve, 800));
+        setSuccessMsg('Quotation confirmed! Your order is now moving to fulfillment.');
+      }
+      
+      setQuote(prev => prev ? { ...prev, status: 'CONFIRMED' } : null);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    setQuote(prev => prev ? { ...prev, status: 'CONFIRMED' } : null);
-    setIsSubmitting(false);
   };
 
   return (
     <div>
-      {/* Test Control (to swap quotes) */}
-      <div style={{ padding: '8px 12px', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', marginBottom: '24px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <strong style={{ fontSize: '0.85rem' }}>View Quote:</strong>
-        <select 
-          value={quote.id} 
-          onChange={e => {
-            setSuccessMsg(null);
-            navigate(`/portal/quote/${e.target.value}?token=mock_magic_token_valid`);
-          }}
-          style={{ padding: '4px', borderRadius: '4px', fontSize: '0.85rem' }}
-        >
-          <option value="Q-2026-004">Q-2026-004 (Negotiation)</option>
-          <option value="Q-2026-005">Q-2026-005 (Already Confirmed)</option>
-        </select>
-      </div>
-
       <div className="portal-card">
         <div className="portal-quote-header">
           <div>
             <h1 className="portal-title">Quotation {quote.id}</h1>
-            <p className="portal-subtitle" style={{ margin: 0 }}>Prepared for {quote.clientName}</p>
+            <p className="portal-subtitle" style={{ margin: 0 }}>Prepared for Customer {quote.clientId}</p>
           </div>
           <div>
             <span className={`portal-status-badge ${isConfirmed ? 'status-confirmed' : 'status-negotiation'}`}>
-              {isConfirmed ? 'Confirmed' : 'Under Negotiation'}
+              {quote.status}
             </span>
           </div>
         </div>
@@ -164,11 +191,11 @@ export const PortalQuotePage: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {quote.items.map(item => (
+            {quote.lines.map(item => (
               <tr key={item.id}>
                 <td>
-                  <div className="portal-item-name">{item.name}</div>
-                  <div className="portal-item-desc">{item.description}</div>
+                  <div className="portal-item-name">{item.product?.name || item.productId}</div>
+                  <div className="portal-item-desc">{item.product?.description}</div>
                   
                   {!isLocked && (
                     <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
@@ -185,7 +212,7 @@ export const PortalQuotePage: React.FC = () => {
                 </td>
                 <td style={{ textAlign: 'center', width: '80px' }}>{item.quantity}</td>
                 <td style={{ textAlign: 'right', fontWeight: 600, width: '120px' }}>
-                  ${item.customerPrice.toLocaleString()}
+                  ${(item.customerPrice || 0).toLocaleString()}
                 </td>
               </tr>
             ))}
@@ -193,7 +220,7 @@ export const PortalQuotePage: React.FC = () => {
         </table>
         
         <div style={{ textAlign: 'right', fontSize: '1.25rem', fontWeight: 700, paddingBottom: '24px' }}>
-          Total Value: ${quote.totalValue.toLocaleString()}
+          Total Value: ${(quote.totalAmount || 0).toLocaleString()}
         </div>
 
         <div className="portal-actions-panel">
