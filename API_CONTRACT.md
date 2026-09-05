@@ -662,5 +662,150 @@ Looks up products currently in the quotation cart, retrieves matching pairing ru
     { "error": "Quotation not found" }
     ```
 
+---
+
+## Approval Workflow Engine Endpoints (`/approvals`, `/backend/approvals`)
+
+### 1. Submit Quotation for Approval
+**`POST /approvals/submit`**
+
+Submits a quotation for approval risk evaluation. Calls risk calculation internally. If no approval is required (`requiredApprovalChain` is null), marks the quote `READY_FOR_FULFILLMENT` and logs an audit log entry. If approval is required, creates an `ApprovalRequest` with `currentStep: "MANAGER"` and updates quote status to `PENDING_APPROVAL`.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "quotationId": "quote-uuid-123",
+    "customerTier": "GOLD"
+  }
+  ```
+
+- **Response `200 OK` (Approval Required)**:
+  ```json
+  {
+    "requiresApproval": true,
+    "approvalRequestId": "req-uuid-456",
+    "currentStep": "MANAGER"
+  }
+  ```
+
+- **Response `200 OK` (Auto-Approved / No Approval Required)**:
+  ```json
+  {
+    "requiresApproval": false
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: Missing `quotationId`.
+  - `404 Not Found`: Quotation not found.
+
+---
+
+### 2. Process Approval Action
+**`POST /approvals/:id/action`**
+
+Approves, rejects, or returns an approval request for revision. Role matching `currentStep` is enforced. Updates `ApprovalRequest` status, advances multi-step chains (`MANAGER` -> `FINANCE`), logs an `ApprovalStepRecord`, and creates a compliance `AuditLog` entry.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "action": "APPROVED",
+    "reason": "Discount overage is within acceptable margin threshold"
+  }
+  ```
+  *Allowed `action` values*: `APPROVED`, `REJECTED`, `RETURNED_FOR_REVISION`
+
+- **Response `200 OK` (Step Advanced)**:
+  ```json
+  {
+    "id": "req-uuid-456",
+    "quotationId": "quote-uuid-123",
+    "blendedRiskScore": 7.5,
+    "requiredApprovers": "MANAGER_THEN_FINANCE",
+    "currentStep": "FINANCE",
+    "status": "PENDING",
+    "stepRecords": [
+      {
+        "id": "step-uuid-1",
+        "approverRole": "MANAGER",
+        "approverId": "user-manager-id",
+        "action": "APPROVED",
+        "reason": "Discount overage is within acceptable margin threshold",
+        "createdAt": "2026-09-05T12:05:00.000Z"
+      }
+    ]
+  }
+  ```
+
+- **Response `200 OK` (Final Approval Completed)**:
+  ```json
+  {
+    "id": "req-uuid-456",
+    "quotationId": "quote-uuid-123",
+    "currentStep": "COMPLETED",
+    "status": "APPROVED"
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: Invalid action or missing reason for `REJECTED`/`RETURNED_FOR_REVISION`.
+  - `403 Forbidden`: User role does not match `currentStep`.
+  - `409 Conflict`: Request is already completed/rejected or concurrent action collision.
+
+---
+
+### 3. Reopen Approval (On Re-Negotiation)
+**`POST /approvals/:quotationId/reopen`**
+
+Internal endpoint called when a negotiated counter-offer changes quotation terms. Re-evaluates risk score. If approval threshold is exceeded, creates a fresh `ApprovalRequest` regardless of previous approval status, and logs a negotiation audit entry.
+
+- **Headers**: `Authorization: Bearer <JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerTier": "GOLD"
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "requiresApproval": true,
+    "approvalRequestId": "new-req-uuid-789",
+    "currentStep": "MANAGER"
+  }
+  ```
+
+---
+
+### 4. Approval History Audit Trail
+**`GET /approvals/:quotationId/history`**
+
+Fetches all `ApprovalStepRecord`s and compliance `AuditLog` entries for a quotation ordered chronologically.
+
+- **Headers**: `Authorization: Bearer <JWT>`
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotationId": "quote-uuid-123",
+    "approvalRequests": [
+      {
+        "id": "req-uuid-456",
+        "blendedRiskScore": 7.5,
+        "requiredApprovers": "MANAGER_THEN_FINANCE",
+        "currentStep": "COMPLETED",
+        "status": "APPROVED",
+        "stepRecords": [...]
+      }
+    ],
+    "stepRecords": [...],
+    "auditLogs": [...]
+  }
+  ```
+
+
 
 

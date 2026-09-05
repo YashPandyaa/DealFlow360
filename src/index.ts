@@ -7,6 +7,7 @@ import { authRouter } from '../auth/auth.router';
 import { subscriptionsRouter, orderInvoiceHandler } from '../subscriptions/subscriptions.router';
 import { discountsRouter } from '../discounts/discounts.router';
 import { upsellRouter } from '../upsell/upsell.router';
+import { approvalsRouter } from '../approvals/approvals.router';
 
 dotenv.config();
 
@@ -31,6 +32,10 @@ app.use('/backend/discounts', discountsRouter);
 // Upsell & Cross-Sell Module Routes
 app.use('/upsell', upsellRouter);
 app.use('/backend/upsell', upsellRouter);
+
+// Approval Engine Module Routes
+app.use('/approvals', approvalsRouter);
+app.use('/backend/approvals', approvalsRouter);
 
 // Order / Quotation Invoice Route
 app.get('/orders/:orderId/invoice', orderInvoiceHandler);
