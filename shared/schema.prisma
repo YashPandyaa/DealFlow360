@@ -36,15 +36,16 @@ model PortalMagicLink {
 
 
 model Product {
-  id          String   @id @default(uuid())
-  sku         String   @unique
-  name        String
-  description String?
-  category    String?
-  basePrice   Float
-  currency    String   @default("USD")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(uuid())
+  sku           String   @unique
+  name          String
+  description   String?
+  category      String?
+  basePrice     Float
+  marginPercent Float    @default(0)
+  currency      String   @default("USD")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   quotationLines QuotationLine[]
 }
@@ -202,15 +203,13 @@ model CreditNote {
 
 
 model UpsellRule {
-  id                  String   @id @default(uuid())
-  name                String
-  description         String?
-  triggerProductId    String?  // Foreign key / identifier for triggering product
-  suggestedProductId  String?  // Foreign key / identifier for suggested product
-  discountPercentage  Float?   @default(0)
-  minQuantity         Int?     @default(1)
-  isActive            Boolean  @default(true)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  triggerProductId   String   // Foreign key to Product
+  suggestedProductId String   // Foreign key to Product
+  coPurchaseScore    Float    @default(0) // Higher = stronger historical pairing
+  isPromoted         Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 }
 

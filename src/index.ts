@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import { authRouter } from '../auth/auth.router';
 import { subscriptionsRouter, orderInvoiceHandler } from '../subscriptions/subscriptions.router';
 import { discountsRouter } from '../discounts/discounts.router';
+import { upsellRouter } from '../upsell/upsell.router';
 
 dotenv.config();
 
@@ -27,9 +28,14 @@ app.use('/backend/subscriptions', subscriptionsRouter);
 app.use('/discounts', discountsRouter);
 app.use('/backend/discounts', discountsRouter);
 
+// Upsell & Cross-Sell Module Routes
+app.use('/upsell', upsellRouter);
+app.use('/backend/upsell', upsellRouter);
+
 // Order / Quotation Invoice Route
 app.get('/orders/:orderId/invoice', orderInvoiceHandler);
 app.get('/backend/orders/:orderId/invoice', orderInvoiceHandler);
+
 
 
 // Health Check Route

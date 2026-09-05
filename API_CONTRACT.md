@@ -572,4 +572,95 @@ Evaluates quotation line discounts against category discount ceilings, computes 
     { "error": "Customer tier 'PLATINUM' not found in discount tier configuration" }
     ```
 
+---
+
+## Upsell & Cross-Sell Engine Endpoints (`/upsell`, `/backend/upsell`)
+
+### 1. UpsellRule CRUD
+**`POST /upsell/rules`** *(Admin Only)*
+
+Defines an upsell/cross-sell pairing between a trigger product and a suggested product.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "triggerProductId": "prod-laptop-uuid",
+    "suggestedProductId": "prod-dock-uuid",
+    "coPurchaseScore": 0.85,
+    "isPromoted": false,
+    "isActive": true
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "rule-uuid-123",
+    "triggerProductId": "prod-laptop-uuid",
+    "suggestedProductId": "prod-dock-uuid",
+    "coPurchaseScore": 0.85,
+    "isPromoted": false,
+    "isActive": true,
+    "createdAt": "2026-09-05T14:00:00.000Z",
+    "updatedAt": "2026-09-05T14:00:00.000Z"
+  }
+  ```
+
+- **Related UpsellRule Routes**:
+  - `GET /upsell/rules` (List all rules; supports `?triggerProductId=...&isActive=true`)
+  - `GET /upsell/rules/:id` (Get rule by ID)
+  - `PUT /upsell/rules/:id` or `PATCH /upsell/rules/:id` (Update rule, Admin only)
+  - `DELETE /upsell/rules/:id` (Delete rule, Admin only)
+
+---
+
+### 2. Get Quotation Upsell Recommendations
+**`GET /upsell/:quotationId`**
+
+Looks up products currently in the quotation cart, retrieves matching pairing rules, filters out items below minimum margin threshold, excludes items already in cart, de-duplicates multiple trigger rules, and ranks results by `isPromoted` (true first) followed by `coPurchaseScore` descending.
+
+- **Query Parameters**:
+  - `minMarginThreshold` *(optional, Float)*: Minimum required product `marginPercent` (e.g. `20` for 20%). Defaults to `0` if not specified.
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "productId": "prod-warranty-uuid",
+      "productName": "3-Year Extended Care Warranty",
+      "marginDelta": 210.00,
+      "isPromoted": true,
+      "coPurchaseScore": 0.70
+    },
+    {
+      "productId": "prod-dock-uuid",
+      "productName": "Thunderbolt 4 Docking Station",
+      "marginDelta": 75.00,
+      "isPromoted": false,
+      "coPurchaseScore": 0.90
+    },
+    {
+      "productId": "prod-mouse-uuid",
+      "productName": "Ergonomic Wireless Mouse",
+      "marginDelta": 20.00,
+      "isPromoted": false,
+      "coPurchaseScore": 0.60
+    }
+  ]
+  ```
+
+- **Special Behaviors / Edge Cases**:
+  - **No lines in quotation**: Returns `[]` (`200 OK`) without error.
+  - **Already in cart**: Products currently in the quotation are excluded.
+  - **De-duplication**: When multiple cart items trigger the same suggested product, only the highest-ranked pairing instance is returned.
+  - **Margin contribution formula**: `marginDelta = product.basePrice * (product.marginPercent / 100)`.
+
+- **Error Responses**:
+  - `404 Not Found`: Quotation ID not found.
+    ```json
+    { "error": "Quotation not found" }
+    ```
+
+
 
