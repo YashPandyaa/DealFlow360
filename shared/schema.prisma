@@ -1,0 +1,111 @@
+// shared/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  role      String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotations Quotation[]
+  auditLogs  AuditLog[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  sku         String   @unique
+  name        String
+  description String?
+  basePrice   Float
+  currency    String   @default("USD")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  discountTiers  DiscountTier[]
+  quotationLines QuotationLine[]
+}
+
+model PriceList {
+  id          String   @id @default(uuid())
+  name        String
+  currency    String   @default("USD")
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  discountTiers DiscountTier[]
+}
+
+model DiscountTier {
+  id            String   @id @default(uuid())
+  priceListId   String?
+  priceList     PriceList? @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  productId     String?
+  product       Product?   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  minQuantity   Int
+  maxQuantity   Int?
+  discountType  String   @default("PERCENTAGE")
+  discountValue Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ApprovalChain {
+  id           String   @id @default(uuid())
+  name         String
+  minAmount    Float    @default(0)
+  maxAmount    Float?
+  approverRole String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Quotation {
+  id          String   @id @default(uuid())
+  quoteNumber String   @unique
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  status      String   @default("DRAFT")
+  totalAmount Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lines QuotationLine[]
+}
+
+model QuotationLine {
+  id          String    @id @default(uuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitPrice   Float
+  discount    Float     @default(0)
+  totalPrice  Float
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  action    String
+  entity    String
+  entityId  String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  details   String?
+  createdAt DateTime @default(now())
+}
