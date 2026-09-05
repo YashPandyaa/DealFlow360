@@ -404,3 +404,263 @@ Aggregates one-time `QuotationLines` and recurring `Subscriptions`. One-time and
   }
   ```
 
+---
+
+## Discount Governance Endpoints (`/discounts`, `/backend/discounts`)
+
+### 1. Discount Tier CRUD
+**`POST /discounts/tiers`** *(Admin Only)*
+
+Creates a customer discount tier setting maximum discount percentage allowed for that tier.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerTier": "GOLD",
+    "maxDiscountPercent": 15.0
+  }
+  ```
+  *Allowed `customerTier` values*: `BRONZE`, `SILVER`, `GOLD`
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "tier-uuid-123",
+    "customerTier": "GOLD",
+    "maxDiscountPercent": 15.0,
+    "createdAt": "2026-09-05T12:00:00.000Z",
+    "updatedAt": "2026-09-05T12:00:00.000Z"
+  }
+  ```
+
+- **Related Tier Routes**:
+  - `GET /discounts/tiers` (List all tiers, Admin only)
+  - `GET /discounts/tiers/:id` (Get tier by ID, Admin only)
+  - `PUT /discounts/tiers/:id` (Update tier, Admin only)
+  - `DELETE /discounts/tiers/:id` (Delete tier, Admin only)
+
+---
+
+### 2. Category Discount Ceiling CRUD
+**`POST /discounts/categories`** (also `/discounts/category-ceilings`) *(Admin Only)*
+
+Defines maximum discount percentage allowed for a product category.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "category": "Service",
+    "maxDiscountPercent": 10.0
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "category-uuid-456",
+    "category": "Service",
+    "maxDiscountPercent": 10.0,
+    "createdAt": "2026-09-05T12:00:00.000Z",
+    "updatedAt": "2026-09-05T12:00:00.000Z"
+  }
+  ```
+
+- **Related Category Routes**:
+  - `GET /discounts/categories` (List all category ceilings, Admin only)
+  - `GET /discounts/categories/:id` (Get ceiling by ID, Admin only)
+  - `PUT /discounts/categories/:id` (Update ceiling, Admin only)
+  - `DELETE /discounts/categories/:id` (Delete ceiling, Admin only)
+
+---
+
+### 3. Approval Chain CRUD
+**`POST /discounts/approval-chains`** *(Admin Only)*
+
+Defines risk score threshold range and required approval role.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "minRiskScore": 0.1,
+    "maxRiskScore": 5.0,
+    "requiredApprovers": "MANAGER"
+  }
+  ```
+  *Allowed `requiredApprovers` values*: `MANAGER`, `MANAGER_THEN_FINANCE`
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "chain-uuid-789",
+    "minRiskScore": 0.1,
+    "maxRiskScore": 5.0,
+    "requiredApprovers": "MANAGER",
+    "createdAt": "2026-09-05T12:00:00.000Z",
+    "updatedAt": "2026-09-05T12:00:00.000Z"
+  }
+  ```
+
+- **Related Approval Chain Routes**:
+  - `GET /discounts/approval-chains` (List all chains, Admin only)
+  - `GET /discounts/approval-chains/:id` (Get chain by ID, Admin only)
+  - `PUT /discounts/approval-chains/:id` (Update chain, Admin only)
+  - `DELETE /discounts/approval-chains/:id` (Delete chain, Admin only)
+
+---
+
+### 4. Calculate Risk Score
+**`POST /discounts/calculate-risk`**
+
+Evaluates quotation line discounts against category discount ceilings, computes order-weighted blended risk score, and determines required approval chain.
+
+- **Formula**:
+  $$\text{line Overage}_i = \max(0, \text{discountPercent}_i - \text{categoryCeiling}_i)$$
+  $$\text{blendedRiskScore} = \sum_{i} \left( \text{line Overage}_i \times \frac{\text{lineTotal}_i}{\text{orderTotal}} \right)$$
+
+- **Headers**: `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "customerTier": "GOLD",
+    "lines": [
+      {
+        "category": "Hardware",
+        "discountPercent": 12,
+        "lineTotal": 800.00
+      },
+      {
+        "category": "Service",
+        "discountPercent": 18,
+        "lineTotal": 200.00
+      }
+    ]
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "blendedRiskScore": 1.6,
+    "flaggedLines": [
+      {
+        "category": "Service",
+        "discountPercent": 18,
+        "categoryCeiling": 10,
+        "overage": 8,
+        "lineTotal": 200.00
+      }
+    ],
+    "requiredApprovalChain": "MANAGER"
+  }
+  ```
+
+- **Zero Overage Response `200 OK`**:
+  ```json
+  {
+    "blendedRiskScore": 0,
+    "flaggedLines": [],
+    "requiredApprovalChain": null
+  }
+  ```
+
+- **Error Responses**:
+  - `400 Bad Request`: `customerTier` or line `category` not found in configuration.
+    ```json
+    { "error": "Customer tier 'PLATINUM' not found in discount tier configuration" }
+    ```
+
+---
+
+## Upsell & Cross-Sell Engine Endpoints (`/upsell`, `/backend/upsell`)
+
+### 1. UpsellRule CRUD
+**`POST /upsell/rules`** *(Admin Only)*
+
+Defines an upsell/cross-sell pairing between a trigger product and a suggested product.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "triggerProductId": "prod-laptop-uuid",
+    "suggestedProductId": "prod-dock-uuid",
+    "coPurchaseScore": 0.85,
+    "isPromoted": false,
+    "isActive": true
+  }
+  ```
+
+- **Response `201 Created`**:
+  ```json
+  {
+    "id": "rule-uuid-123",
+    "triggerProductId": "prod-laptop-uuid",
+    "suggestedProductId": "prod-dock-uuid",
+    "coPurchaseScore": 0.85,
+    "isPromoted": false,
+    "isActive": true,
+    "createdAt": "2026-09-05T14:00:00.000Z",
+    "updatedAt": "2026-09-05T14:00:00.000Z"
+  }
+  ```
+
+- **Related UpsellRule Routes**:
+  - `GET /upsell/rules` (List all rules; supports `?triggerProductId=...&isActive=true`)
+  - `GET /upsell/rules/:id` (Get rule by ID)
+  - `PUT /upsell/rules/:id` or `PATCH /upsell/rules/:id` (Update rule, Admin only)
+  - `DELETE /upsell/rules/:id` (Delete rule, Admin only)
+
+---
+
+### 2. Get Quotation Upsell Recommendations
+**`GET /upsell/:quotationId`**
+
+Looks up products currently in the quotation cart, retrieves matching pairing rules, filters out items below minimum margin threshold, excludes items already in cart, de-duplicates multiple trigger rules, and ranks results by `isPromoted` (true first) followed by `coPurchaseScore` descending.
+
+- **Query Parameters**:
+  - `minMarginThreshold` *(optional, Float)*: Minimum required product `marginPercent` (e.g. `20` for 20%). Defaults to `0` if not specified.
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "productId": "prod-warranty-uuid",
+      "productName": "3-Year Extended Care Warranty",
+      "marginDelta": 210.00,
+      "isPromoted": true,
+      "coPurchaseScore": 0.70
+    },
+    {
+      "productId": "prod-dock-uuid",
+      "productName": "Thunderbolt 4 Docking Station",
+      "marginDelta": 75.00,
+      "isPromoted": false,
+      "coPurchaseScore": 0.90
+    },
+    {
+      "productId": "prod-mouse-uuid",
+      "productName": "Ergonomic Wireless Mouse",
+      "marginDelta": 20.00,
+      "isPromoted": false,
+      "coPurchaseScore": 0.60
+    }
+  ]
+  ```
+
+- **Special Behaviors / Edge Cases**:
+  - **No lines in quotation**: Returns `[]` (`200 OK`) without error.
+  - **Already in cart**: Products currently in the quotation are excluded.
+  - **De-duplication**: When multiple cart items trigger the same suggested product, only the highest-ranked pairing instance is returned.
+  - **Margin contribution formula**: `marginDelta = product.basePrice * (product.marginPercent / 100)`.
+
+- **Error Responses**:
+  - `404 Not Found`: Quotation ID not found.
+    ```json
+    { "error": "Quotation not found" }
+    ```
+
+
+
