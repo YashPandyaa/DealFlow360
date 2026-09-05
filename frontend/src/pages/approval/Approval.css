@@ -1,0 +1,336 @@
+.appr-container {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Test Controls */
+.appr-test-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f3f4f6;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border: 1px dashed #d1d5db;
+}
+
+.appr-test-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.appr-select {
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+/* Grid Layout */
+.appr-grid {
+  display: grid;
+  grid-template-columns: 7fr 3fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.appr-main {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.appr-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Cards */
+.appr-card {
+  background: var(--bg-secondary, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.appr-card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  background: #f9fafb;
+}
+
+.appr-card-title {
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin: 0;
+  color: var(--text-primary, #111827);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.appr-card-body {
+  padding: 20px;
+}
+
+/* Banners */
+.appr-banner {
+  padding: 16px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+
+.appr-banner-reopened {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+
+.appr-banner-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #047857;
+}
+
+/* Risk Panel */
+.appr-risk-score {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.appr-risk-high { color: #dc2626; }
+.appr-risk-med { color: #d97706; }
+.appr-risk-low { color: #16a34a; }
+
+.appr-flagged-list {
+  list-style-type: disc;
+  padding-left: 20px;
+  color: var(--text-secondary, #4b5563);
+  font-size: 0.875rem;
+  margin: 12px 0 0 0;
+}
+
+.appr-flagged-list li {
+  margin-bottom: 4px;
+}
+
+/* Audit Trail (Timeline) */
+.appr-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.appr-timeline-item {
+  display: flex;
+  gap: 16px;
+  position: relative;
+}
+
+.appr-timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 15px;
+  top: 32px;
+  bottom: -16px;
+  width: 2px;
+  background: #e5e7eb;
+}
+
+.appr-timeline-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f3f4f6;
+  border: 2px solid white;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.icon-sub { background: #e5e7eb; color: #4b5563; }
+.icon-app { background: #dcfce7; color: #16a34a; }
+.icon-rej { background: #fee2e2; color: #dc2626; }
+.icon-rev { background: #fef3c7; color: #d97706; }
+
+.appr-timeline-content {
+  flex: 1;
+  background: #f9fafb;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.appr-timeline-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 0.875rem;
+}
+
+.appr-timeline-actor {
+  font-weight: 600;
+  color: #111827;
+}
+
+.appr-timeline-role {
+  color: #6b7280;
+  margin-left: 4px;
+}
+
+.appr-timeline-time {
+  color: #9ca3af;
+  font-size: 0.75rem;
+}
+
+.appr-timeline-reason {
+  font-size: 0.875rem;
+  color: #374151;
+  font-style: italic;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #d1d5db;
+}
+
+/* Chain Steps */
+.appr-chain {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.appr-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+}
+
+.appr-step.is-pending {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.1);
+}
+
+.appr-step-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.appr-step-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.status-pend { background: #e0e7ff; color: #4338ca; }
+.status-appr { background: #dcfce7; color: #16a34a; }
+.status-reje { background: #fee2e2; color: #dc2626; }
+
+/* Actions */
+.appr-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.appr-readonly {
+  padding: 16px;
+  background: #f3f4f6;
+  border-radius: 6px;
+  color: #4b5563;
+  text-align: center;
+  font-size: 0.875rem;
+  border: 1px dashed #d1d5db;
+}
+
+.appr-reason-box {
+  background: #f9fafb;
+  padding: 16px;
+  border-radius: 6px;
+  border: 1px solid #e5e7eb;
+}
+
+.appr-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  margin: 8px 0;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.appr-btn-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.appr-btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.appr-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-approve { background: #10b981; color: white; }
+.btn-approve:hover:not(:disabled) { background: #059669; }
+
+.btn-reject { background: white; border-color: #ef4444; color: #ef4444; }
+.btn-reject:hover:not(:disabled) { background: #fef2f2; }
+
+.btn-return { background: white; border-color: #f59e0b; color: #d97706; }
+.btn-return:hover:not(:disabled) { background: #fffbeb; }
+
+.btn-cancel { background: #f3f4f6; color: #4b5563; border-color: #d1d5db; flex: 0 0 auto; }
+.btn-cancel:hover { background: #e5e7eb; }
+
+.btn-submit-reason { background: #4f46e5; color: white; flex: 1; }
+.btn-submit-reason:hover:not(:disabled) { background: #4338ca; }
+
+.appr-fulfill-link {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 8px 16px;
+  background: #4f46e5;
+  color: white;
+  text-decoration: none;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.appr-fulfill-link:hover {
+  background: #4338ca;
+}

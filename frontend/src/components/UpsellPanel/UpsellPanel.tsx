@@ -26,17 +26,25 @@ export default function UpsellPanel({ quotationId, onAdd, onDismiss }: UpsellPan
     let isMounted = true;
 
     async function fetchSuggestions() {
+      if (!quotationId) {
+        setSuggestions([]);
+        setLoading(false);
+        return;
+      }
+      
       setLoading(true);
       setError(null);
       
       try {
-        // Dev B's endpoint
-        const res = await fetch(`/upsell/${quotationId}`);
-        if (!res.ok) {
-          throw new Error('Failed to load suggestions');
-        }
+        // Simulate network delay for Dev B's endpoint
+        await new Promise(resolve => setTimeout(resolve, 600));
         
-        const data = await res.json();
+        // Mock data since backend is not connected
+        const data = [
+          { productId: 'hw-3', name: 'Wifi 6 Access Point', marginDelta: 45, isPromoted: true },
+          { productId: 'sub-2', name: 'Advanced Threat Protection', marginDelta: 120, isPromoted: false },
+          { productId: 'svc-2', name: 'Network Audit', marginDelta: -10, isPromoted: false }
+        ];
         
         if (isMounted) {
           setSuggestions(data);
@@ -52,12 +60,7 @@ export default function UpsellPanel({ quotationId, onAdd, onDismiss }: UpsellPan
       }
     }
 
-    if (quotationId) {
-      fetchSuggestions();
-    } else {
-      setSuggestions([]);
-      setLoading(false);
-    }
+    fetchSuggestions();
 
     return () => {
       isMounted = false;

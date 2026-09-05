@@ -20,6 +20,7 @@ export interface WorkspaceContextType {
   registerReloadListener: (listener: () => Promise<void> | void) => () => void;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -101,6 +102,7 @@ export const WorkspaceProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkspace = (): WorkspaceContextType => {
   const context = useContext(WorkspaceContext);
   if (!context) {

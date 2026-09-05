@@ -1,0 +1,346 @@
+.bill-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Test Controls */
+.bill-test-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f3f4f6;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  border: 1px dashed #d1d5db;
+}
+
+.bill-test-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.bill-select {
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+/* Tables */
+.bill-section {
+  background: var(--bg-secondary, #ffffff);
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.bill-section-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #e5e7eb);
+  background: #f9fafb;
+}
+
+.bill-section-title {
+  font-weight: 600;
+  font-size: 1.125rem;
+  margin: 0;
+  color: var(--text-primary, #111827);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bill-table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.bill-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bill-table th {
+  background: #f9fafb;
+  text-align: left;
+  padding: 12px 20px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: #6b7280;
+  font-weight: 600;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.bill-table td {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: top;
+}
+
+.bill-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Cancelled State */
+.bill-row-cancelled {
+  background-color: #f9fafb;
+}
+
+.bill-row-cancelled td {
+  color: #9ca3af;
+}
+
+.bill-row-cancelled .bill-item-name {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+/* Item Details */
+.bill-item-name {
+  font-weight: 600;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bill-item-cycle {
+  font-size: 0.75rem;
+  background: #e0e7ff;
+  color: #4338ca;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.bill-item-dates {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.bill-status-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  text-transform: uppercase;
+}
+
+.status-active { background: #dcfce7; color: #16a34a; }
+.status-cancelled { background: #f3f4f6; color: #6b7280; }
+
+/* Inputs and Actions */
+.bill-qty-input {
+  width: 60px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.bill-qty-input:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+
+.bill-price {
+  font-weight: 600;
+  color: #111827;
+}
+
+.bill-action-btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: white;
+  border-color: #ef4444;
+  color: #ef4444;
+}
+
+.bill-action-btn:hover:not(:disabled) {
+  background: #fef2f2;
+}
+
+.bill-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Proration & Credit Messages */
+.bill-proration-msg {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+  font-weight: 500;
+}
+
+.bill-credit-msg {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-weight: 500;
+}
+
+/* Loading */
+.bill-loading-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #cbd5e1;
+  border-top-color: #4f46e5;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+  margin-left: 8px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Subtotals & Totals */
+.bill-subtotal-footer {
+  padding: 16px 20px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 24px;
+  align-items: center;
+}
+
+.bill-subtotal-label {
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.bill-subtotal-val {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.bill-total-section {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.bill-total-card {
+  background: #111827;
+  color: white;
+  padding: 24px 32px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 300px;
+}
+
+.bill-total-label {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.bill-total-val {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.bill-total-subtext {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin-top: 8px;
+}
+
+/* Cancellation Modal inline */
+.bill-cancel-box {
+  margin-top: 12px;
+  background: white;
+  border: 1px solid #fca5a5;
+  border-radius: 6px;
+  padding: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.bill-cancel-title {
+  margin: 0 0 8px 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.bill-cancel-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+  resize: vertical;
+}
+
+.bill-cancel-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.bill-cancel-submit {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bill-cancel-submit:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.bill-cancel-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bill-cancel-close {
+  background: #f3f4f6;
+  color: #4b5563;
+  border: 1px solid #d1d5db;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.bill-cancel-close:hover {
+  background: #e5e7eb;
+}

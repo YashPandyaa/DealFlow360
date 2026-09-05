@@ -65,19 +65,18 @@ export const FulfillmentPage: React.FC = () => {
   const [hasNewStock, setHasNewStock] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Switch scenarios
-  useEffect(() => {
-    setSplitData(MOCK_SCENARIOS[activeScenario]);
+  const handleScenarioChange = (key: string) => {
+    setActiveScenario(key);
+    setSplitData(MOCK_SCENARIOS[key]);
     setIsManualMode(false);
     setHasNewStock(false);
     
-    // Initialize manual allocations
     const initialManual: Record<string, number> = {};
-    MOCK_SCENARIOS[activeScenario].allocations.forEach(a => {
+    MOCK_SCENARIOS[key].allocations.forEach(a => {
       initialManual[a.id] = a.quantity;
     });
     setManualAllocations(initialManual);
-  }, [activeScenario]);
+  };
 
   // Backorder Reload Listener
   useEffect(() => {
@@ -160,7 +159,7 @@ export const FulfillmentPage: React.FC = () => {
               name="scenario" 
               value={key} 
               checked={activeScenario === key} 
-              onChange={() => setActiveScenario(key)} 
+              onChange={() => handleScenarioChange(key)} 
             />
             {key}
           </label>
