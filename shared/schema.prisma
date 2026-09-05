@@ -15,6 +15,7 @@ model User {
   passwordHash String?
   name         String?
   role         String   @default("REP")
+  teamId       String?
   isPortalUser Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -86,14 +87,17 @@ model ApprovalChain {
 }
 
 model Quotation {
-  id          String   @id @default(uuid())
-  quoteNumber String   @unique
-  userId      String
-  user        User     @relation(fields: [userId], references: [id])
-  status      String   @default("DRAFT")
-  totalAmount Float    @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  quoteNumber        String    @unique
+  userId             String
+  user               User      @relation(fields: [userId], references: [id])
+  customerName       String?
+  status             String    @default("DRAFT")
+  totalAmount        Float     @default(0)
+  targetDeliveryDate DateTime?
+  actualDeliveryDate DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   lines QuotationLine[]
 }

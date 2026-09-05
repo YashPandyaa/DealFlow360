@@ -662,5 +662,170 @@ Looks up products currently in the quotation cart, retrieves matching pairing ru
     { "error": "Quotation not found" }
     ```
 
+---
+
+## Reporting & Deal Health Analytics Endpoints (`/reports`, `/backend/reports`)
+
+### 1. Filtered Quotations Report
+**`GET /reports/quotations`**
+
+Retrieves a paginated and filtered list of quotations matching all provided criteria (`AND` logic).
+
+- **Query Parameters**:
+  - `from` *(optional, ISO Date String)*: Start creation date filter.
+  - `to` *(optional, ISO Date String)*: End creation date filter.
+  - `salesRepId` *(optional, String)*: Filter by Sales Rep user ID.
+  - `teamId` *(optional, String)*: Filter by Sales Rep team ID.
+  - `approvalStatus` or `status` *(optional, String)*: Filter by quotation status (`DRAFT`, `SUBMITTED`, `ACCEPTED`, `REJECTED`, etc.).
+  - `category` *(optional, String)*: Filter quotations containing products of this category.
+  - `page` *(optional, Integer, default `1`)*: Page number.
+  - `limit` *(optional, Integer, default `20`)*: Page size (max `100`).
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotations": [
+      {
+        "id": "quote-uuid-001",
+        "quoteNumber": "QT-2026-001",
+        "userId": "user-uuid-123",
+        "salesRep": {
+          "id": "user-uuid-123",
+          "name": "Jane Doe",
+          "email": "jane@dealflow360.com",
+          "teamId": "ENTERPRISE-EAST"
+        },
+        "customerName": "Acme Corp",
+        "status": "ACCEPTED",
+        "totalAmount": 15000.00,
+        "linesCount": 2,
+        "lines": [
+          {
+            "id": "line-1",
+            "productId": "prod-1",
+            "productName": "Enterprise Server Node",
+            "category": "Hardware",
+            "quantity": 5,
+            "unitPrice": 3000.00,
+            "discount": 0,
+            "totalPrice": 15000.00
+          }
+        ],
+        "targetDeliveryDate": "2026-10-01T00:00:00.000Z",
+        "actualDeliveryDate": null,
+        "createdAt": "2026-09-01T10:00:00.000Z",
+        "updatedAt": "2026-09-05T12:00:00.000Z"
+      }
+    ],
+    "totalCount": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1
+  }
+  ```
+
+---
+
+### 2. Export Quotation Report
+**`GET /reports/export`**
+
+Exports the filtered quotation report directly into downloadable file format.
+
+- **Query Parameters**: Same filters as `/reports/quotations` + `format=pdf|xlsx|csv` (default `pdf`).
+- **Response Headers**:
+  - For PDF: `Content-Type: application/pdf`, `Content-Disposition: attachment; filename="quotations-report.pdf"`
+  - For XLSX: `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `Content-Disposition: attachment; filename="quotations-report.xlsx"`
+  - For CSV: `Content-Type: text/csv`, `Content-Disposition: attachment; filename="quotations-report.csv"`
+- **Response**: Binary file stream or CSV text stream.
+- **Edge Case**: If the filtered query returns 0 rows, generates a valid file containing table headers without erroring.
+
+---
+
+### 3. Deal Health Dashboard Analytics
+**`GET /reports/deal-health`**
+
+Aggregates operational deal health metrics across all active quotations.
+
+- **Query Parameters**:
+  - `stalledDays` *(optional, Integer, default `5`)*: Inactivity threshold in days for non-terminal deals.
+  - `discountAnomalyMultiplier` *(optional, Float, default `1.5`)*: Anomaly threshold multiplier above rep's historical average.
+  - `minHistoryFloor` *(optional, Integer, default `3`)*: Minimum deals required before evaluating anomaly detection.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "stalledDeals": [
+      {
+        "quotationId": "quote-uuid-stalled",
+        "quoteNumber": "QT-2026-STALLED",
+        "customerName": "Stalled Prospect Inc",
+        "salesRepId": "user-uuid-bob",
+        "salesRepName": "Bob Smith",
+        "status": "DRAFT",
+        "daysInactive": 9,
+        "updatedAt": "2026-08-27T10:00:00.000Z",
+        "totalAmount": 5000.00
+      }
+    ],
+    "discountAnomalies": [
+      {
+        "quotationId": "quote-uuid-anomaly",
+        "quoteNumber": "QT-2026-ANOMALY",
+        "customerName": "Large Discount Corp",
+        "salesRepId": "user-uuid-bob",
+        "salesRepName": "Bob Smith",
+        "status": "SUBMITTED",
+        "discountPercent": 30.00,
+        "repAvgDiscount": 10.00,
+        "anomalyRatio": 3.00,
+        "totalAmount": 1400.00,
+        "createdAt": "2026-09-05T11:00:00.000Z"
+      }
+    ],
+    "deliverySlippage": [
+      {
+        "quotationId": "quote-uuid-slipped",
+        "quoteNumber": "QT-2026-SLIPPED",
+        "customerName": "Delayed Delivery Corp",
+        "salesRepName": "Alice Wonder",
+        "status": "ACCEPTED",
+        "daysSlipped": 4,
+        "targetDeliveryDate": "2026-09-01T00:00:00.000Z",
+        "actualDeliveryDate": null,
+        "totalAmount": 3500.00
+      }
+    ]
+  }
+  ```
+
+---
+
+### 4. Deal Health Nudge Escalation
+**`POST /reports/deal-health/:quotationId/nudge`**
+
+Triggers an escalation nudge action for a stalled deal or anomaly by logging an `AuditLog` entry.
+
+- **Request Body**:
+  ```json
+  {
+    "message": "Please follow up with customer regarding pending approval",
+    "escalationType": "MANAGER_ESCALATION",
+    "targetRole": "MANAGER"
+  }
+  ```
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "success": true,
+    "message": "Nudge escalation sent successfully for quotation QT-2026-STALLED",
+    "quotationId": "quote-uuid-stalled",
+    "quoteNumber": "QT-2026-STALLED",
+    "actionId": "audit-log-uuid-456",
+    "timestamp": "2026-09-05T14:40:00.000Z"
+  }
+  ```
+
+
 
 

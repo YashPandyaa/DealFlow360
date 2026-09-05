@@ -7,6 +7,7 @@ import { authRouter } from '../auth/auth.router';
 import { subscriptionsRouter, orderInvoiceHandler } from '../subscriptions/subscriptions.router';
 import { discountsRouter } from '../discounts/discounts.router';
 import { upsellRouter } from '../upsell/upsell.router';
+import { reportsRouter } from '../reports/reports.router';
 
 dotenv.config();
 
@@ -32,9 +33,14 @@ app.use('/backend/discounts', discountsRouter);
 app.use('/upsell', upsellRouter);
 app.use('/backend/upsell', upsellRouter);
 
+// Reporting & Deal Health Analytics Module Routes
+app.use('/reports', reportsRouter);
+app.use('/backend/reports', reportsRouter);
+
 // Order / Quotation Invoice Route
 app.get('/orders/:orderId/invoice', orderInvoiceHandler);
 app.get('/backend/orders/:orderId/invoice', orderInvoiceHandler);
+
 
 
 
