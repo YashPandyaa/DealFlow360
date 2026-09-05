@@ -109,3 +109,75 @@ model AuditLog {
   details   String?
   createdAt DateTime @default(now())
 }
+
+// --- Dev B Models ---
+
+model Warehouse {
+  id          String            @id @default(uuid())
+  name        String
+  code        String            @unique
+  location    String?
+  capacity    Int?
+  isActive    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  stockAllocations StockAllocation[]
+}
+
+model StockAllocation {
+  id          String    @id @default(uuid())
+  warehouseId String
+  warehouse   Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productId   String    // Foreign key to Product
+  quotationId String?   // Foreign key to Quotation
+  quantity    Int       @default(0)
+  status      String    @default("RESERVED") // RESERVED, ALLOCATED, RELEASED, FULFILLED
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model SubscriptionPlan {
+  id               String            @id @default(uuid())
+  name             String
+  code             String?           @unique
+  description      String?
+  billingFrequency String            @default("MONTHLY") // MONTHLY, QUARTERLY, ANNUALLY
+  price            Float
+  currency         String            @default("USD")
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  billingSchedules BillingSchedule[]
+}
+
+model BillingSchedule {
+  id                 String           @id @default(uuid())
+  subscriptionPlanId String
+  subscriptionPlan   SubscriptionPlan @relation(fields: [subscriptionPlanId], references: [id], onDelete: Cascade)
+  quotationId        String?          // Foreign key to Quotation
+  userId             String?          // Foreign key to User
+  startDate          DateTime
+  nextBillingDate    DateTime
+  endDate            DateTime?
+  status             String           @default("ACTIVE") // ACTIVE, PAUSED, CANCELLED
+  amount             Float
+  currency           String           @default("USD")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model UpsellRule {
+  id                  String   @id @default(uuid())
+  name                String
+  description         String?
+  triggerProductId    String?  // Foreign key / identifier for triggering product
+  suggestedProductId  String?  // Foreign key / identifier for suggested product
+  discountPercentage  Float?   @default(0)
+  minQuantity         Int?     @default(1)
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
