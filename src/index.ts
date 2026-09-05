@@ -3,6 +3,8 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 
+import { authRouter } from '../auth/auth.router';
+
 dotenv.config();
 
 const app = express();
@@ -10,6 +12,10 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+
+// Auth Module Routes
+app.use('/auth', authRouter);
+app.use('/backend/auth', authRouter);
 
 // Health Check Route
 app.get('/health', (req: Request, res: Response) => {
