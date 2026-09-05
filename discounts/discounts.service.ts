@@ -277,9 +277,19 @@ export class DiscountsService {
         throw new Error('Each line must have a category specified');
       }
 
-      const ceilingRecord = await prisma.categoryDiscountCeiling.findUnique({
+      let ceilingRecord = await prisma.categoryDiscountCeiling.findUnique({
         where: { category: line.category }
       });
+
+      if (!ceilingRecord) {
+        // Case-insensitive / singular-plural fallback
+        const allCeilings = await prisma.categoryDiscountCeiling.findMany();
+        ceilingRecord = allCeilings.find(
+          (c) =>
+            c.category.toLowerCase() === line.category.toLowerCase() ||
+            c.category.toLowerCase().replace(/s$/, '') === line.category.toLowerCase().replace(/s$/, '')
+        ) || null;
+      }
 
       if (!ceilingRecord) {
         throw new Error(`Category '${line.category}' not found in category discount ceiling configuration`);

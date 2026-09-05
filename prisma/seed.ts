@@ -317,8 +317,8 @@ async function main() {
 
   await prisma.categoryDiscountCeiling.upsert({
     where: { category: 'Hardware' },
-    update: { maxDiscountPercent: 10.0 },
-    create: { category: 'Hardware', maxDiscountPercent: 10.0 }
+    update: { maxDiscountPercent: 15.0 },
+    create: { category: 'Hardware', maxDiscountPercent: 15.0 }
   });
   await prisma.categoryDiscountCeiling.upsert({
     where: { category: 'Software' },
@@ -327,8 +327,8 @@ async function main() {
   });
   await prisma.categoryDiscountCeiling.upsert({
     where: { category: 'Service' },
-    update: { maxDiscountPercent: 15.0 },
-    create: { category: 'Service', maxDiscountPercent: 15.0 }
+    update: { maxDiscountPercent: 10.0 },
+    create: { category: 'Service', maxDiscountPercent: 10.0 }
   });
 
   await prisma.approvalChain.deleteMany();
@@ -365,7 +365,6 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-DRAFT-01',
       userId: repAlice.id,
-      customerId: customer.id,
       customerName: 'Acme Global Corp',
       customerTier: 'GOLD',
       status: 'DRAFT',
@@ -377,30 +376,25 @@ async function main() {
             quantity: 2,
             unitPrice: 5000.0,
             discount: 5.0,
-            discountPercent: 5.0,
-            totalPrice: 9500.0,
-            lineTotal: 9500.0
+            totalPrice: 9500.0
           },
           {
             productId: gateway.id,
             quantity: 5,
             unitPrice: 500.0,
             discount: 0.0,
-            discountPercent: 0.0,
-            totalPrice: 2500.0,
-            lineTotal: 2500.0
+            totalPrice: 2500.0
           }
         ]
       }
     }
   });
 
-  // Quotation 2: PENDING_APPROVAL (Flagged 25% discount on Hardware exceeds 10% ceiling; stalled 10 days)
+  // Quotation 2: PENDING_APPROVAL (Flagged 25% discount on Hardware exceeds 15% ceiling; stalled 10 days)
   const qPending = await prisma.quotation.create({
     data: {
       quoteNumber: 'QT-DEMO-PENDING-02',
       userId: repAlice.id,
-      customerId: customer.id,
       customerName: 'Global Logistics Enterprise',
       customerTier: 'SILVER',
       status: 'PENDING_APPROVAL',
@@ -412,19 +406,15 @@ async function main() {
             productId: server.id,
             quantity: 4,
             unitPrice: 5000.0,
-            discount: 25.0, // Flagged: 15% above 10% Hardware ceiling!
-            discountPercent: 25.0,
-            totalPrice: 15000.0,
-            lineTotal: 15000.0
+            discount: 25.0, // Flagged: 10% above 15% Hardware ceiling!
+            totalPrice: 15000.0
           },
           {
             productId: saas.id,
             quantity: 2,
             unitPrice: 150.0,
             discount: 0.0,
-            discountPercent: 0.0,
-            totalPrice: 300.0,
-            lineTotal: 300.0
+            totalPrice: 300.0
           }
         ]
       }
@@ -457,13 +447,12 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-HIST-01',
       userId: repAlice.id,
-      customerId: customer.id,
       customerName: 'Baseline Client A',
       status: 'APPROVED',
       totalAmount: 5000.0,
       lines: {
         create: [
-          { productId: server.id, quantity: 1, unitPrice: 5000.0, discount: 2.0, discountPercent: 2.0, totalPrice: 4900.0, lineTotal: 4900.0 }
+          { productId: server.id, quantity: 1, unitPrice: 5000.0, discount: 2.0, totalPrice: 4900.0 }
         ]
       }
     }
@@ -473,13 +462,12 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-HIST-02',
       userId: repAlice.id,
-      customerId: customer.id,
       customerName: 'Baseline Client B',
       status: 'APPROVED',
       totalAmount: 1000.0,
       lines: {
         create: [
-          { productId: gateway.id, quantity: 2, unitPrice: 500.0, discount: 0.0, discountPercent: 0.0, totalPrice: 1000.0, lineTotal: 1000.0 }
+          { productId: gateway.id, quantity: 2, unitPrice: 500.0, discount: 0.0, totalPrice: 1000.0 }
         ]
       }
     }
@@ -490,7 +478,6 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-SPLIT-03',
       userId: repBob.id,
-      customerId: customer.id,
       customerName: 'TechCorp International',
       customerTier: 'GOLD',
       status: 'ALLOCATED',
@@ -576,7 +563,6 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-BACKORDER-04',
       userId: repAlice.id,
-      customerId: customer.id,
       customerName: 'Apex Telemetry Systems',
       customerTier: 'GOLD',
       status: 'PARTIALLY_ALLOCATED',
@@ -626,7 +612,6 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-FULFILLED-05',
       userId: repBob.id,
-      customerId: customer.id,
       customerName: 'Horizon Telecom',
       customerTier: 'GOLD',
       status: 'FULFILLED',
@@ -659,7 +644,6 @@ async function main() {
     data: {
       quoteNumber: 'QT-DEMO-SLIPPED-06',
       userId: repBob.id,
-      customerId: customer.id,
       customerName: 'Slipped Order Systems',
       customerTier: 'SILVER',
       status: 'APPROVED',

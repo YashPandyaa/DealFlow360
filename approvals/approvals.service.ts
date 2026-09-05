@@ -152,9 +152,17 @@ export class ApprovalsService {
       throw err;
     }
 
-    const approvalRequest = await prisma.approvalRequest.findUnique({
+    let approvalRequest = await prisma.approvalRequest.findUnique({
       where: { id: approvalRequestId }
     });
+
+    if (!approvalRequest) {
+      // Also check if the ID passed was a quotationId with an active pending approval request
+      approvalRequest = await prisma.approvalRequest.findFirst({
+        where: { quotationId: approvalRequestId, status: 'PENDING' },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
 
     if (!approvalRequest) {
       const err = new Error(`ApprovalRequest with ID '${approvalRequestId}' not found`);
@@ -208,7 +216,7 @@ export class ApprovalsService {
     // DB-level atomic check & update to prevent double-processing / race conditions
     const updateResult = await prisma.approvalRequest.updateMany({
       where: {
-        id: approvalRequestId,
+        id: approvalRequest.id,
         status: 'PENDING',
         currentStep: approvalRequest.currentStep
       },
@@ -235,7 +243,7 @@ export class ApprovalsService {
     const stepRecordAction = actionUpper === 'RETURNED_FOR_REVISION' ? 'RETURNED' : actionUpper;
     const stepRecord = await prisma.approvalStepRecord.create({
       data: {
-        approvalRequestId,
+        approvalRequestId: approvalRequest.id,
         approverRole: user.role,
         approverId: user.id,
         action: stepRecordAction,
@@ -247,7 +255,7 @@ export class ApprovalsService {
     await prisma.auditLog.create({
       data: {
         entityType: 'ApprovalRequest',
-        entityId: approvalRequestId,
+        entityId: approvalRequest.id,
         userId: user.id,
         action: actionUpper,
         reason: reason ? reason.trim() : null,
@@ -261,7 +269,7 @@ export class ApprovalsService {
     });
 
     const updatedRequest = await prisma.approvalRequest.findUnique({
-      where: { id: approvalRequestId },
+      where: { id: approvalRequest.id },
       include: { stepRecords: true }
     });
 
@@ -354,15 +362,34 @@ export class ApprovalsService {
    * 4. GET /approvals/:quotationId/history
    * Fetches step records and audit log entries for a quotation ordered chronologically.
    */
-  async getHistory(quotationId: string) {
-    if (!quotationId) {
+  async getHistory(idOrNumber: string) {
+    if (!idOrNumber) {
       const err = new Error('quotationId is required');
       (err as any).statusCode = 400;
       throw err;
     }
 
+    // Resolve target quotation ID
+    let targetQuotationId = idOrNumber;
+    const directQuotation = await prisma.quotation.findFirst({
+      where: {
+        OR: [{ id: idOrNumber }, { quoteNumber: idOrNumber }]
+      }
+    });
+
+    if (directQuotation) {
+      targetQuotationId = directQuotation.id;
+    } else {
+      const directAppReq = await prisma.approvalRequest.findUnique({
+        where: { id: idOrNumber }
+      });
+      if (directAppReq) {
+        targetQuotationId = directAppReq.quotationId;
+      }
+    }
+
     const approvalRequests = await prisma.approvalRequest.findMany({
-      where: { quotationId },
+      where: { quotationId: targetQuotationId },
       include: {
         stepRecords: true
       },
@@ -374,9 +401,14 @@ export class ApprovalsService {
     const auditLogs = await prisma.auditLog.findMany({
       where: {
         OR: [
-          { entityId: quotationId },
+          { entityId: targetQuotationId },
           { entityId: { in: requestIds } }
         ]
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true, role: true }
+        }
       },
       orderBy: { createdAt: 'asc' }
     });
@@ -385,11 +417,36 @@ export class ApprovalsService {
     const stepRecords = approvalRequests.flatMap((req) => req.stepRecords);
     stepRecords.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+    // Enrich step records with approver details
+    const approverIds = Array.from(new Set(stepRecords.map((s) => s.approverId).filter(Boolean)));
+    const approvers = await prisma.user.findMany({
+      where: { id: { in: approverIds } },
+      select: { id: true, name: true, email: true, role: true }
+    });
+    const approverMap = new Map(approvers.map((u) => [u.id, u]));
+
+    const enrichedStepRecords = stepRecords.map((s) => {
+      const u = approverMap.get(s.approverId);
+      return {
+        ...s,
+        approverName: u?.name || s.approverRole,
+        approverEmail: u?.email || null,
+        approverRole: u?.role || s.approverRole
+      };
+    });
+
+    const enrichedAuditLogs = auditLogs.map((a) => ({
+      ...a,
+      userName: a.user?.name || 'System',
+      userEmail: a.user?.email || null,
+      userRole: a.user?.role || null
+    }));
+
     return {
-      quotationId,
+      quotationId: targetQuotationId,
       approvalRequests,
-      stepRecords,
-      auditLogs
+      stepRecords: enrichedStepRecords,
+      auditLogs: enrichedAuditLogs
     };
   }
 }

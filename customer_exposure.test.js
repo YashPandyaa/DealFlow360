@@ -61,14 +61,13 @@ describe('Customer Exposure Safeguards & Portal/Dashboard Verification', () => {
       data: {
         quoteNumber: `QT-EXP-${Date.now()}`,
         userId: repUser.id,
-        customerId: customerUser.id,
         customerName: 'Acme Corp',
         customerTier: 'GOLD',
         status: 'DRAFT',
         totalAmount: 5000,
         lines: {
           create: [
-            { productId: seededProduct.id, quantity: 1, unitPrice: 5000, discount: 20, discountPercent: 20, totalPrice: 4000, lineTotal: 4000 }
+            { productId: seededProduct.id, quantity: 1, unitPrice: 5000, discount: 20, totalPrice: 4000 }
           ]
         }
       }
