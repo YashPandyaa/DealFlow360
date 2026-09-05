@@ -53,6 +53,7 @@ model Product {
   variants       ProductVariant[]
   priceLists     PriceList[]
   quotationLines QuotationLine[]
+  warehouseStock WarehouseStock[]
 }
 
 model ProductVariant {
@@ -188,7 +189,22 @@ model Warehouse {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
+  stockItems       WarehouseStock[]
   stockAllocations StockAllocation[]
+}
+
+model WarehouseStock {
+  id           String    @id @default(uuid())
+  warehouseId  String
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity     Int       @default(0)
+  allocatedQty Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([warehouseId, productId])
 }
 
 model StockAllocation {
@@ -198,7 +214,7 @@ model StockAllocation {
   productId   String    // Foreign key to Product
   quotationId String?   // Foreign key to Quotation
   quantity    Int       @default(0)
-  status      String    @default("RESERVED") // RESERVED, ALLOCATED, RELEASED, FULFILLED
+  status      String    @default("ALLOCATED") // RESERVED, ALLOCATED, RELEASED, FULFILLED, BACKORDERED
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }

@@ -1110,6 +1110,214 @@ Deletes a product from the catalog. Blocks deletion with `409 Conflict` if the p
   { "error": "Cannot delete product 'prod-uuid-1' because it is referenced in existing quotations or price lists" }
   ```
 
+---
+
+## Warehouses & Multi-Location Fulfillment Endpoints (`/warehouses`)
+
+### 1. List Warehouses with Stock Inventory
+**`GET /warehouses`**
+
+Returns all active warehouses with inventory stock records.
+
+- **Response `200 OK`**:
+  ```json
+  [
+    {
+      "id": "wh-uuid-1",
+      "name": "East Coast DC",
+      "code": "WH-EAST",
+      "location": "Newark, NJ",
+      "capacity": 10000,
+      "isActive": true,
+      "stockItems": [
+        {
+          "id": "stock-uuid-1",
+          "productId": "prod-uuid-1",
+          "quantity": 3,
+          "allocatedQty": 0,
+          "product": {
+            "id": "prod-uuid-1",
+            "sku": "HW-SENSOR-IOT",
+            "name": "Telemetry Sensor Pack"
+          }
+        }
+      ]
+    }
+  ]
+  ```
+
+---
+
+### 2. Update Stock Inventory
+**`POST /warehouses/:id/stock`** *(Admin Only)*
+
+Sets the on-hand quantity for a product in a warehouse.
+
+- **Headers**: `Authorization: Bearer <ADMIN_JWT>`, `Content-Type: application/json`
+- **Request Body**:
+  ```json
+  {
+    "productId": "prod-uuid-1",
+    "quantity": 15
+  }
+  ```
+- **Response `200 OK`**:
+  ```json
+  {
+    "id": "stock-uuid-1",
+    "warehouseId": "wh-uuid-1",
+    "productId": "prod-uuid-1",
+    "quantity": 15,
+    "allocatedQty": 0
+  }
+  ```
+
+---
+
+### 3. Preview Fulfillment Split
+**`GET /warehouses/suggest-split/:quotationId`**
+
+Simulates fulfillment split allocation across warehouses without reserving stock.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotation": { "id": "quote-uuid-1", "quoteNumber": "Q-2026-001" },
+    "suggestions": [
+      {
+        "productId": "prod-uuid-1",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseId": "wh-uuid-1",
+        "warehouseName": "East Coast DC",
+        "warehouseCode": "WH-EAST",
+        "quantity": 3,
+        "status": "ALLOCATED"
+      },
+      {
+        "productId": "prod-uuid-1",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseId": "wh-uuid-2",
+        "warehouseName": "West Coast DC",
+        "warehouseCode": "WH-WEST",
+        "quantity": 4,
+        "status": "ALLOCATED"
+      },
+      {
+        "productId": "prod-uuid-1",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseId": null,
+        "warehouseName": "Backorder Center",
+        "warehouseCode": "BACKORDER",
+        "quantity": 3,
+        "status": "BACKORDERED"
+      }
+    ],
+    "fullyAllocated": false,
+    "totalRequested": 10,
+    "totalAllocated": 7,
+    "totalBackordered": 3
+  }
+  ```
+
+---
+
+### 4. Execute Fulfillment Split
+**`POST /warehouses/fulfill/:quotationId`**
+
+Executes fulfillment: generates `StockAllocation` records, increments `allocatedQty` on `WarehouseStock`, and updates Quotation status (`ALLOCATED` or `PARTIALLY_ALLOCATED`).
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "quotationId": "quote-uuid-1",
+    "quoteNumber": "Q-2026-001",
+    "status": "PARTIALLY_ALLOCATED",
+    "fulfillmentSummary": {
+      "fullyAllocated": false,
+      "totalItemsRequested": 10,
+      "allocatedItems": 7,
+      "backorderedItems": 3
+    },
+    "allocations": [
+      {
+        "id": "alloc-uuid-1",
+        "quotationId": "quote-uuid-1",
+        "warehouseId": "wh-uuid-1",
+        "productId": "prod-uuid-1",
+        "quantity": 3,
+        "status": "ALLOCATED",
+        "productName": "Telemetry Sensor Pack",
+        "warehouseName": "East Coast DC",
+        "warehouseCode": "WH-EAST"
+      }
+    ]
+  }
+  ```
+
+---
+
+## Unified Order Invoicing Endpoints (`/orders/:orderId/invoice`)
+
+### 1. Hybrid Order / Quotation Combined Invoice
+**`GET /orders/:orderId/invoice`** (or `GET /subscriptions/orders/:orderId/invoice`)
+
+Generates a unified invoice aggregating both one-time quotation line items and recurring subscription schedules without requiring client-side calculation.
+
+- **Response `200 OK`**:
+  ```json
+  {
+    "orderId": "quote-uuid-1",
+    "quoteNumber": "Q-2026-001",
+    "oneTimeTotal": 4100.00,
+    "recurringTotal": 250.00,
+    "combinedInvoiceTotal": 4350.00,
+    "quotationLines": [
+      {
+        "id": "line-uuid-1",
+        "productId": "prod-uuid-1",
+        "productName": "Enterprise App Server",
+        "quantity": 1,
+        "unitPrice": 4000.00,
+        "discount": 20.0,
+        "totalPrice": 3200.00
+      }
+    ],
+    "subscriptions": [
+      {
+        "id": "sub-uuid-1",
+        "planName": "Enterprise Cloud Fleet License",
+        "billingCycle": "MONTHLY",
+        "pricePerCycle": 250.00,
+        "quantity": 1,
+        "cycleTotal": 250.00,
+        "status": "ACTIVE"
+      }
+    ],
+    "upcomingSchedule": [
+      {
+        "id": "sched-uuid-1",
+        "planName": "Enterprise Cloud Fleet License",
+        "billingDate": "2026-10-05T00:00:00.000Z",
+        "amount": 250.00,
+        "status": "UPCOMING"
+      }
+    ],
+    "creditNotes": []
+  }
+  ```
+
+---
+
+## Inter-Module Workflow & Wiring Agreement
+
+1. **Wire Approval $\rightarrow$ Fulfillment**:
+   - Frontend or automated pipeline triggers `POST /warehouses/fulfill/:quotationId` upon `APPROVED` quotation status.
+   - The engine automatically resolves stock across all warehouses, reserves inventory, and tracks backorders.
+2. **Wire Fulfillment $\rightarrow$ Billing**:
+   - Frontend or customer portal requests `GET /orders/:orderId/invoice` once an order is placed/fulfilled.
+   - Subscriptions and hardware line items are automatically partitioned into one-time vs recurring charges.
+
+
 
 
 
