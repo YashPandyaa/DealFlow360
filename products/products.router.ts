@@ -363,8 +363,9 @@ productsRouter.put('/:id', authenticate, requireRole(['ADMIN']), handleUpdatePro
 productsRouter.delete('/:id', authenticate, requireRole(['ADMIN']), async (req: Request, res: Response): Promise<void> => {
   try {
     const id = getParamString(req.params.id);
-    await productsService.deleteProduct(id);
-    res.status(200).json({ message: 'Product deleted successfully' });
+    const force = req.query.force === 'true' || req.query.archive === 'true';
+    const result = await productsService.deleteProduct(id, force);
+    res.status(200).json(result);
   } catch (error: any) {
     const status = error.statusCode || 400;
     res.status(status).json({ error: error.message });

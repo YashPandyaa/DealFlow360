@@ -408,7 +408,21 @@ export class DiscountsService {
     await this.ensureDiscountConfigsSeeded();
     const { quotationId, salesRepId, customerTier, customerId, customerName, lines } = input;
 
-    // 1. Resolve Customer-Specific Discount Limit dynamically
+    // 1. Resolve Customer Tier Limit & Customer-Specific Discount Limit dynamically
+    let tierMaxDiscount = 100.0;
+    if (customerTier) {
+      const tierKey = customerTier.toUpperCase();
+      const discountTier = await prisma.discountTier.findUnique({
+        where: { customerTier: tierKey }
+      });
+      if (!discountTier) {
+        const err = new Error(`Customer tier '${customerTier}' not found in discount tier configuration`);
+        (err as any).statusCode = 400;
+        throw err;
+      }
+      tierMaxDiscount = discountTier.maxDiscountPercent;
+    }
+
     let customerMaxDiscount: number | null = null;
 
     if (customerId || customerName) {
@@ -437,19 +451,7 @@ export class DiscountsService {
     }
 
     if (customerMaxDiscount === null) {
-      const tierKey = customerTier ? customerTier.toUpperCase() : 'GOLD';
-      const discountTier = await prisma.discountTier.findUnique({
-        where: { customerTier: tierKey }
-      });
-      if (discountTier) {
-        customerMaxDiscount = discountTier.maxDiscountPercent;
-      } else if (customerTier) {
-        const err = new Error(`Customer tier '${customerTier}' not found in discount tier configuration`);
-        (err as any).statusCode = 400;
-        throw err;
-      } else {
-        customerMaxDiscount = 15.0;
-      }
+      customerMaxDiscount = customerTier ? tierMaxDiscount : 15.0;
     }
 
     // Edge case: Empty lines array -> return 0 risk score and no approval required
@@ -548,7 +550,7 @@ export class DiscountsService {
       }
 
       const categoryCeiling = ceilingRecord ? ceilingRecord.maxDiscountPercent : 100.0;
-      const allowedDiscount = Math.min(customerMaxDiscount, categoryCeiling);
+      const allowedDiscount = Math.min(customerMaxDiscount, tierMaxDiscount, categoryCeiling);
 
       const excess = Math.max(0, appliedDiscount - allowedDiscount);
       const discountLineRisk = Math.min(50, (excess / 20) * 50);
@@ -562,12 +564,14 @@ export class DiscountsService {
         if (p) {
           if (!unitPrice) unitPrice = p.basePrice || 0;
           if (!costPrice) {
-            costPrice = p.costPrice || (p.marginPercent > 0 ? unitPrice * (1 - p.marginPercent / 100) : 0);
+            const margin = (p.marginPercent !== null && p.marginPercent !== undefined && p.marginPercent > 0) ? p.marginPercent : 30.0;
+            costPrice = p.costPrice || unitPrice * (1 - margin / 100);
           }
         }
       }
-      if (!costPrice && unitPrice > 0 && (line as any).product?.marginPercent) {
-        costPrice = unitPrice * (1 - (line as any).product.marginPercent / 100);
+      if (!costPrice && unitPrice > 0) {
+        const margin = (line as any).product?.marginPercent || 30.0;
+        costPrice = unitPrice * (1 - margin / 100);
       }
 
       const quantity = Number(line.quantity || 1);

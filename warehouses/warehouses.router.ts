@@ -1,6 +1,7 @@
 // warehouses/warehouses.router.ts
 import { Router, Request, Response } from 'express';
 import { warehousesService } from './warehouses.service';
+import { inventoryService } from './inventory.service';
 import { authenticate, requireRole, AuthenticatedRequest } from '../auth/auth.middleware';
 import { prisma } from '../shared/prisma';
 
@@ -300,11 +301,11 @@ warehousesRouter.post(
 warehousesRouter.post(
   '/:id/stock',
   authenticate,
-  requireRole(['ADMIN']),
-  async (req: Request, res: Response): Promise<void> => {
+  requireRole(['ADMIN', 'FINANCE_OPERATIONS', 'FINANCE', 'OPERATIONS']),
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const warehouseId = getParamString(req.params.id);
-      const { productId, quantity } = req.body;
+      const { productId, quantity, reorderLevel } = req.body;
 
       if (!productId || typeof productId !== 'string' || !productId.trim()) {
         res.status(400).json({ error: 'productId is required' });
@@ -316,18 +317,22 @@ warehousesRouter.post(
         return;
       }
 
-      const stockRecord = await warehousesService.setStock(
-        warehouseId,
-        productId.trim(),
-        Number(quantity)
+      const stockRecord = await inventoryService.createStock(
+        {
+          warehouseId,
+          productId: productId.trim(),
+          quantity: Number(quantity),
+          reorderLevel: reorderLevel !== undefined ? Number(reorderLevel) : undefined
+        },
+        req.user?.id
       );
 
       res.status(200).json(stockRecord);
     } catch (error: any) {
-      if (error.message.includes('not found')) {
+      if (error.message && error.message.includes('not found')) {
         res.status(404).json({ error: error.message });
       } else {
-        res.status(400).json({ error: error.message });
+        res.status(error.statusCode || 400).json({ error: error.message });
       }
     }
   }

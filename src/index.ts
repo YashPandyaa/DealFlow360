@@ -11,6 +11,7 @@ import { reportsRouter } from '../reports/reports.router';
 import { approvalsRouter } from '../approvals/approvals.router';
 import { productsRouter } from '../products/products.router';
 import { warehousesRouter } from '../warehouses/warehouses.router';
+import { warehouseStockRouter } from '../warehouses/warehouse_stock.router';
 import { quotationsRouter } from '../quotations/quotations.router';
 import { adminRouter } from './admin/admin.router';
 import { dashboardsRouter } from './dashboards/dashboards.router';
@@ -55,6 +56,11 @@ app.use('/backend/quotations', quotationsRouter);
 // Warehouse & Inventory Fulfillment Routes
 app.use('/warehouses', warehousesRouter);
 app.use('/backend/warehouses', warehousesRouter);
+
+// Dedicated Warehouse Stock Inventory Routes
+app.use('/warehouse-stock', warehouseStockRouter);
+app.use('/backend/warehouse-stock', warehouseStockRouter);
+app.use('/api/warehouse-stock', warehouseStockRouter);
 
 // Reporting & Deal Health Analytics Module Routes
 app.use('/reports', reportsRouter);

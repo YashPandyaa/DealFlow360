@@ -120,22 +120,30 @@ export default function QuotationBuilder() {
     loadInitialData();
   }, [categoryFilter, reloadCounter]);
 
-  // 2. Fetch customer discount limit when customer selection changes
+  // 2. Fetch customer discount limit when customer selection or tier changes
   useEffect(() => {
-    if (!selectedCustomerId) return;
+    const tierRec = discountTiers.find((t) => t.customerTier?.toUpperCase() === customerTier.toUpperCase());
+    const fallbackTierLimit = tierRec ? tierRec.maxDiscountPercent : (customerTier === 'GOLD' ? 15.0 : customerTier === 'SILVER' ? 10.0 : 5.0);
+
+    if (!selectedCustomerId) {
+      setCustomerLimit(fallbackTierLimit);
+      return;
+    }
+
     const fetchLimit = async () => {
       try {
         const res = await apiFetch(`/discounts/customer-limits/${selectedCustomerId}`);
         if (res && typeof res.maxDiscountPercent === 'number') {
           setCustomerLimit(res.maxDiscountPercent);
+        } else {
+          setCustomerLimit(fallbackTierLimit);
         }
       } catch (err) {
-        // Fall back to tier limit if specific customer limit not found
-        setCustomerLimit(customerTier === 'GOLD' ? 15.0 : customerTier === 'SILVER' ? 10.0 : 5.0);
+        setCustomerLimit(fallbackTierLimit);
       }
     };
     fetchLimit();
-  }, [selectedCustomerId, customerTier]);
+  }, [selectedCustomerId, customerTier, discountTiers]);
 
   // 2b. Live Risk Calculation on Cart & Customer Changes
   useEffect(() => {
@@ -272,7 +280,9 @@ export default function QuotationBuilder() {
     const tierCeiling = tierRecord ? tierRecord.maxDiscountPercent : (customerTier === 'GOLD' ? 15.0 : customerTier === 'SILVER' ? 10.0 : 5.0);
 
     // Effective Allowed Limit = Most restrictive applicable limit
-    const effectiveAllowed = Math.min(customerLimit, catCeiling, tierCeiling);
+    const effectiveAllowed = selectedCustomerId
+      ? Math.min(customerLimit, catCeiling, tierCeiling)
+      : Math.min(catCeiling, tierCeiling);
     const lineOverage = Math.max(0, (item.discountPercent || 0) - effectiveAllowed);
     return { ...item, lineTotal, cost, catName, catCeiling, tierCeiling, effectiveAllowed, lineOverage };
   });
