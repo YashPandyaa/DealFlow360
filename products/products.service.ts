@@ -1,5 +1,6 @@
 // products/products.service.ts
 import { prisma } from '../shared/prisma';
+import { inventoryService } from '../warehouses/inventory.service';
 
 export const FX_RATES: Record<string, number> = {
   USD: 1.0,
@@ -441,6 +442,22 @@ export class ProductsService {
       }
     }
 
+    let subPlanId: string | null | undefined = undefined;
+    if (data.subscriptionPlanId !== undefined) {
+      if (data.subscriptionPlanId === null || (typeof data.subscriptionPlanId === 'string' && data.subscriptionPlanId.trim() === '')) {
+        subPlanId = null;
+      } else {
+        const idStr = String(data.subscriptionPlanId).trim();
+        const planExists = await prisma.subscriptionPlan.findUnique({ where: { id: idStr } });
+        if (!planExists) {
+          const err = new Error(`SubscriptionPlan with ID '${idStr}' not found`);
+          (err as any).statusCode = 400;
+          throw err;
+        }
+        subPlanId = idStr;
+      }
+    }
+
     const updatedBasePrice = data.basePrice !== undefined ? Number(data.basePrice) : existing.basePrice;
     const updatedCostPrice = data.costPrice !== undefined ? Number(data.costPrice) : existing.costPrice;
     let marginPercent = data.marginPercent !== undefined ? Number(data.marginPercent) : existing.marginPercent;
@@ -465,15 +482,15 @@ export class ProductsService {
         productType: data.productType ? data.productType.toUpperCase() : undefined,
         billingType: data.billingType ? data.billingType.toUpperCase() : undefined,
         status: data.status ? data.status.toUpperCase() : undefined,
-        subscriptionPlanId: data.subscriptionPlanId !== undefined ? data.subscriptionPlanId : undefined
+        subscriptionPlanId: subPlanId
       }
     });
 
     return this.getProductById(id);
   }
 
-  async deleteProduct(id: string) {
-    await this.getProductById(id);
+  async deleteProduct(id: string, forceArchive: boolean = false) {
+    const existing = await this.getProductById(id);
 
     // Referential integrity checks
     const quotationLineCount = await prisma.quotationLine.count({ where: { productId: id } });
@@ -481,12 +498,21 @@ export class ProductsService {
     const priceListCount = await prisma.priceList.count({ where: { productId: id } });
 
     if (quotationLineCount > 0 || salesOrderLineCount > 0 || priceListCount > 0) {
+      if (forceArchive) {
+        await prisma.product.update({
+          where: { id },
+          data: { status: 'INACTIVE' }
+        });
+        return { message: `Product '${existing.name}' is referenced in active records and has been archived (set to INACTIVE).`, archived: true };
+      }
+
       const err = new Error(`Cannot delete product '${id}' because it is referenced in existing quotations or price lists`);
       (err as any).statusCode = 409;
       throw err;
     }
 
-    return prisma.product.delete({ where: { id } });
+    await prisma.product.delete({ where: { id } });
+    return { message: 'Product deleted successfully', archived: false };
   }
 
   // ============================================================================
@@ -725,46 +751,12 @@ export class ProductsService {
   // ============================================================================
 
   async updateProductWarehouseStock(productId: string, warehouseId: string, quantity: number, reorderLevel?: number) {
-    await this.getProductById(productId);
-
-    const wh = await prisma.warehouse.findUnique({ where: { id: warehouseId } });
-    if (!wh) {
-      const err = new Error(`Warehouse with ID '${warehouseId}' not found`);
-      (err as any).statusCode = 404;
-      throw err;
-    }
-
-    if (typeof quantity !== 'number' || quantity < 0) {
-      const err = new Error('Stock quantity cannot be negative');
-      (err as any).statusCode = 400;
-      throw err;
-    }
-
-    const stockRecord = await prisma.warehouseStock.upsert({
-      where: {
-        warehouseId_productId: { warehouseId, productId }
-      },
-      create: {
-        warehouseId,
-        productId,
-        quantity: Number(quantity),
-        reorderLevel: reorderLevel !== undefined ? Number(reorderLevel) : 10
-      },
-      update: {
-        quantity: Number(quantity),
-        reorderLevel: reorderLevel !== undefined ? Number(reorderLevel) : undefined
-      },
-      include: {
-        warehouse: true
-      }
+    return inventoryService.createStock({
+      warehouseId,
+      productId,
+      quantity,
+      reorderLevel
     });
-
-    const availableQty = Math.max(0, stockRecord.quantity - stockRecord.reservedQty);
-
-    return {
-      ...stockRecord,
-      availableQty
-    };
   }
 
   // ============================================================================

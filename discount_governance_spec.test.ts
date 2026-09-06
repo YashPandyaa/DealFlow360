@@ -46,16 +46,23 @@ describe('DealFlow360 Discount Governance Specification Audit Suite (14 Tests)',
       ]
     });
 
-    // Ensure sample product exists
-    let prod = await prisma.product.findFirst({ where: { category: 'Hardware' } });
+    // Ensure sample product exists with valid cost/base pricing
+    let prod = await prisma.product.findFirst({ where: { sku: 'HW-SPEC-01' } });
     if (!prod) {
       prod = await prisma.product.create({
         data: {
           name: 'Hardware Server Spec',
           sku: 'HW-SPEC-01',
           category: 'Hardware',
-          basePrice: 1000.0
+          basePrice: 1000.0,
+          costPrice: 700.0,
+          marginPercent: 30.0
         }
+      });
+    } else {
+      await prisma.product.update({
+        where: { id: prod.id },
+        data: { basePrice: 1000.0, costPrice: 700.0, marginPercent: 30.0 }
       });
     }
     sampleProductId = prod.id;

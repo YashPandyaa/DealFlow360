@@ -32,16 +32,23 @@ describe('Sales Representative Dynamic Customer & Category Discount Governance A
       .send({ email: 'admin@dealflow360.com', password: 'password123' });
     adminToken = adminRes.body.token;
 
-    // Ensure sample product exists
-    let sampleProd = await prisma.product.findFirst({ where: { category: 'Hardware' } });
+    // Ensure sample product exists with valid cost/base pricing
+    let sampleProd = await prisma.product.findFirst({ where: { sku: 'HW-SRV-X1' } });
     if (!sampleProd) {
       sampleProd = await prisma.product.create({
         data: {
           name: 'Enterprise Server X1',
           sku: 'HW-SRV-X1',
           category: 'Hardware',
-          basePrice: 1000.0
+          basePrice: 1000.0,
+          costPrice: 700.0,
+          marginPercent: 30.0
         }
+      });
+    } else {
+      await prisma.product.update({
+        where: { id: sampleProd.id },
+        data: { basePrice: 1000.0, costPrice: 700.0, marginPercent: 30.0 }
       });
     }
     sampleProductId = sampleProd.id;

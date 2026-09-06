@@ -45,6 +45,8 @@ export default function ProductManagementScreen() {
   const [priceLists, setPriceLists] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+  const [stockItems, setStockItems] = useState([]);
+  const [inventorySummary, setInventorySummary] = useState(null);
 
   // Filter & Search States
   const [searchQuery, setSearchQuery] = useState('');
@@ -62,6 +64,7 @@ export default function ProductManagementScreen() {
 
   // Selected Item States
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [selectedStock, setSelectedStock] = useState(null);
 
   // Form States
   const [loading, setLoading] = useState(false);
@@ -92,7 +95,7 @@ export default function ProductManagementScreen() {
   const [newVariant, setNewVariant] = useState({ attribute: '', value: '', extraPrice: 0 });
 
   // Stock Update Form State
-  const [stockForm, setStockForm] = useState({ warehouseId: '', quantity: 0, reorderLevel: 10 });
+  const [stockForm, setStockForm] = useState({ stockId: '', warehouseId: '', productId: '', quantity: 0, reorderLevel: 10 });
 
   // Price List Form State
   const [priceListForm, setPriceListForm] = useState({
@@ -109,12 +112,14 @@ export default function ProductManagementScreen() {
     setLoading(true);
     setError('');
     try {
-      const [prodsRes, catsRes, pListsRes, whRes, subsRes] = await Promise.allSettled([
+      const [prodsRes, catsRes, pListsRes, whRes, subsRes, stockRes, sumRes] = await Promise.allSettled([
         apiFetch(`/products?status=${statusFilter}&category=${categoryFilter}&billingType=${billingFilter}&search=${searchQuery}`),
         apiFetch('/products/categories'),
         apiFetch('/products/price-lists'),
         apiFetch('/warehouses'),
-        apiFetch('/subscriptions/plans')
+        apiFetch('/subscriptions/plans'),
+        apiFetch('/warehouse-stock'),
+        apiFetch('/warehouse-stock/summary')
       ]);
 
       if (prodsRes.status === 'fulfilled') setProducts(Array.isArray(prodsRes.value) ? prodsRes.value : []);
@@ -122,6 +127,8 @@ export default function ProductManagementScreen() {
       if (pListsRes.status === 'fulfilled') setPriceLists(Array.isArray(pListsRes.value) ? pListsRes.value : []);
       if (whRes.status === 'fulfilled') setWarehouses(Array.isArray(whRes.value) ? whRes.value : []);
       if (subsRes.status === 'fulfilled') setSubscriptionPlans(Array.isArray(subsRes.value) ? subsRes.value : []);
+      if (stockRes.status === 'fulfilled') setStockItems(Array.isArray(stockRes.value) ? stockRes.value : []);
+      if (sumRes.status === 'fulfilled') setInventorySummary(sumRes.value);
     } catch (err) {
       console.error('Failed to load products data:', err);
       setError(err.message || 'Failed to load product catalog');
@@ -182,7 +189,8 @@ export default function ProductManagementScreen() {
         ...productForm,
         basePrice: Number(productForm.basePrice),
         costPrice: Number(productForm.costPrice),
-        tax: Number(productForm.tax)
+        tax: Number(productForm.tax),
+        subscriptionPlanId: productForm.subscriptionPlanId || null
       };
 
       await apiFetch(`/products/${selectedProduct.id}`, {
@@ -206,10 +214,25 @@ export default function ProductManagementScreen() {
     setError('');
 
     try {
-      await apiFetch(`/products/${id}`, { method: 'DELETE' });
-      setSuccessMsg(`Product '${name}' deleted successfully!`);
+      const res = await apiFetch(`/products/${id}`, { method: 'DELETE' });
+      setSuccessMsg(res.message || `Product '${name}' deleted successfully!`);
       fetchData();
     } catch (err) {
+      if (err.message && err.message.includes('referenced in existing quotations or price lists')) {
+        const shouldArchive = window.confirm(
+          `Product '${name}' cannot be permanently deleted because it has existing quotations or price list records.\n\nWould you like to ARCHIVE (set status to INACTIVE) this product instead so it is hidden from active catalog listing?`
+        );
+        if (shouldArchive) {
+          try {
+            const archiveRes = await apiFetch(`/products/${id}?archive=true`, { method: 'DELETE' });
+            setSuccessMsg(archiveRes.message || `Product '${name}' has been archived.`);
+            fetchData();
+          } catch (archiveErr) {
+            setError(archiveErr.message || `Failed to archive product '${name}'`);
+          }
+          return;
+        }
+      }
       setError(err.message || `Cannot delete product '${name}'`);
     }
   };
@@ -257,24 +280,87 @@ export default function ProductManagementScreen() {
   // 5. Stock Update Handler
   const handleUpdateStock = async (e) => {
     e.preventDefault();
-    if (!selectedProduct?.id || !stockForm.warehouseId) return;
+    if (!stockForm.warehouseId || !stockForm.productId) return;
     setSubmitting(true);
     setError('');
 
     try {
-      await apiFetch(`/products/${selectedProduct.id}/stock`, {
-        method: 'POST',
-        body: JSON.stringify({
-          warehouseId: stockForm.warehouseId,
-          quantity: Number(stockForm.quantity),
-          reorderLevel: Number(stockForm.reorderLevel)
-        })
-      });
+      if (stockForm.stockId) {
+        await apiFetch(`/warehouse-stock/${stockForm.stockId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            quantity: Number(stockForm.quantity),
+            reorderLevel: Number(stockForm.reorderLevel)
+          })
+        });
+      } else {
+        await apiFetch('/warehouse-stock', {
+          method: 'POST',
+          body: JSON.stringify({
+            warehouseId: stockForm.warehouseId,
+            productId: stockForm.productId,
+            quantity: Number(stockForm.quantity),
+            reorderLevel: Number(stockForm.reorderLevel)
+          })
+        });
+      }
+
       setShowStockModal(false);
       setSuccessMsg('Warehouse stock updated successfully!');
-      fetchData();
+      await fetchData();
+
+      if (selectedProduct?.id) {
+        try {
+          const freshProd = await apiFetch(`/products/${selectedProduct.id}`);
+          setSelectedProduct(freshProd);
+        } catch (e) {}
+      }
     } catch (err) {
       setError(err.message || 'Failed to update warehouse stock');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Stock Delete Handler
+  const handleDeleteStock = async (ws) => {
+    if (!ws?.id) return;
+    const prodName = ws.product?.name || 'Product';
+    const whName = ws.warehouse?.name || 'Warehouse';
+    if (!window.confirm(`Are you sure you want to delete stock record for '${prodName}' in '${whName}'?`)) return;
+    setError('');
+
+    try {
+      const res = await apiFetch(`/warehouse-stock/${ws.id}`, { method: 'DELETE' });
+      setSuccessMsg(res.message || 'Warehouse stock record deleted successfully!');
+      await fetchData();
+
+      if (selectedProduct?.id) {
+        try {
+          const freshProd = await apiFetch(`/products/${selectedProduct.id}`);
+          setSelectedProduct(freshProd);
+        } catch (e) {}
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to delete warehouse stock record');
+    }
+  };
+
+  // Bulk Replenish All Stock Handler
+  const handleReplenishAllStock = async () => {
+    if (!window.confirm('Are you sure you want to add +50 stock quantity to all active products across all warehouses?')) return;
+    setSubmitting(true);
+    setError('');
+
+    try {
+      const res = await apiFetch('/warehouse-stock/replenish-all', {
+        method: 'POST',
+        body: JSON.stringify({ quantity: 50 })
+      });
+      setSuccessMsg(res.message || 'Stock quantity added to all products successfully!');
+      await fetchData();
+    } catch (err) {
+      setError(err.message || 'Failed to replenish stock');
     } finally {
       setSubmitting(false);
     }
@@ -367,15 +453,29 @@ export default function ProductManagementScreen() {
     setShowVariantModal(true);
   };
 
-  const openStockModal = (p) => {
-    setSelectedProduct(p);
-    const firstWh = warehouses.length > 0 ? warehouses[0].id : '';
-    const existingStock = p.warehouseStock?.find((s) => s.warehouseId === firstWh);
-    setStockForm({
-      warehouseId: firstWh,
-      quantity: existingStock ? existingStock.quantity : 0,
-      reorderLevel: existingStock ? existingStock.reorderLevel : 10
-    });
+  const openStockModal = (p, ws = null) => {
+    if (p) setSelectedProduct(p);
+    if (ws) {
+      setSelectedStock(ws);
+      setStockForm({
+        stockId: ws.id,
+        warehouseId: ws.warehouseId,
+        productId: ws.productId || p?.id || '',
+        quantity: ws.quantityOnHand !== undefined ? ws.quantityOnHand : ws.quantity,
+        reorderLevel: ws.reorderLevel !== undefined ? ws.reorderLevel : 10
+      });
+    } else {
+      const firstWh = warehouses.length > 0 ? warehouses[0].id : '';
+      const existingStock = stockItems.find((s) => s.warehouseId === firstWh && s.productId === p?.id);
+      setSelectedStock(existingStock || null);
+      setStockForm({
+        stockId: existingStock ? existingStock.id : '',
+        warehouseId: firstWh,
+        productId: p?.id || '',
+        quantity: existingStock ? (existingStock.quantityOnHand !== undefined ? existingStock.quantityOnHand : existingStock.quantity) : 0,
+        reorderLevel: existingStock ? existingStock.reorderLevel : 10
+      });
+    }
     setShowStockModal(true);
   };
 
@@ -686,64 +786,129 @@ export default function ProductManagementScreen() {
       {/* TAB 3: WAREHOUSE STOCK LEVELS */}
       {/* ==================================================================== */}
       {activeTab === 'stock' && (
-        <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>Multi-Warehouse Inventory Ledger</h3>
-              <p style={{ fontSize: '0.8rem', color: '#475569' }}>On-hand, reserved, and available stock levels per warehouse location</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Inventory Summary Cards */}
+          {inventorySummary && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+              <div className="card" style={{ padding: '1rem', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: '600', textTransform: 'uppercase' }}>Total Stock On-Hand</span>
+                <h4 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0f172a', marginTop: '0.25rem' }}>{inventorySummary.totalStockOnHand || 0}</h4>
+              </div>
+              <div className="card" style={{ padding: '1rem', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', color: '#059669', fontWeight: '600', textTransform: 'uppercase' }}>Available Stock</span>
+                <h4 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#059669', marginTop: '0.25rem' }}>{inventorySummary.totalAvailableStock || 0}</h4>
+              </div>
+              <div className="card" style={{ padding: '1rem', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', color: '#d97706', fontWeight: '600', textTransform: 'uppercase' }}>Reserved / Allocated</span>
+                <h4 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#d97706', marginTop: '0.25rem' }}>{inventorySummary.totalReservedStock || 0}</h4>
+              </div>
+              <div className="card" style={{ padding: '1rem', backgroundColor: '#ffffff', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', color: '#dc2626', fontWeight: '600', textTransform: 'uppercase' }}>Low / Out of Stock</span>
+                <h4 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#dc2626', marginTop: '0.25rem' }}>{(inventorySummary.lowStockCount || 0) + (inventorySummary.outOfStockCount || 0)}</h4>
+              </div>
             </div>
-          </div>
+          )}
 
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Warehouse</th>
-                  <th>On Hand Qty</th>
-                  <th>Reserved Qty</th>
-                  <th>Available Qty</th>
-                  <th>Reorder Level</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.flatMap((p) =>
-                  (p.warehouseStock || []).map((ws) => {
-                    const avail = Math.max(0, ws.quantity - ws.reservedQty);
-                    const isLow = avail <= ws.reorderLevel;
+          <div className="card">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: '700', color: '#0f172a' }}>Multi-Warehouse Inventory Ledger</h3>
+                <p style={{ fontSize: '0.8rem', color: '#475569' }}>On-hand, reserved, and available stock levels per warehouse location</p>
+              </div>
+              {canModifyStock && (
+                <button
+                  onClick={handleReplenishAllStock}
+                  className="btn btn-primary btn-sm"
+                  disabled={submitting}
+                  style={{ borderRadius: '8px' }}
+                >
+                  <Plus size={14} />
+                  <span>Restock All (+50 Units)</span>
+                </button>
+              )}
+            </div>
 
-                    return (
-                      <tr key={`${p.id}-${ws.warehouseId}`}>
-                        <td style={{ fontWeight: '700', color: '#0f172a' }}>{p.name} <span style={{ fontSize: '0.75rem', color: '#64748b' }}>({p.sku})</span></td>
-                        <td><span className="badge badge-purple">{ws.warehouse?.name || ws.warehouseId}</span></td>
-                        <td><strong>{ws.quantity}</strong></td>
-                        <td style={{ color: '#d97706' }}>{ws.reservedQty}</td>
-                        <td>
-                          <strong style={{ color: avail > 0 ? '#059669' : '#dc2626' }}>{avail}</strong>
-                          {isLow && <span className="badge badge-red" style={{ marginLeft: '0.5rem', fontSize: '0.65rem' }}>LOW STOCK</span>}
-                        </td>
-                        <td>{ws.reorderLevel}</td>
-                        <td>
-                          {canModifyStock && (
-                            <button
-                              onClick={() => {
-                                setSelectedProduct(p);
-                                setStockForm({ warehouseId: ws.warehouseId, quantity: ws.quantity, reorderLevel: ws.reorderLevel });
-                                setShowStockModal(true);
-                              }}
-                              className="btn btn-outline btn-xs"
-                            >
-                              Edit Stock
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            <div className="table-container">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Warehouse</th>
+                    <th>On Hand Qty</th>
+                    <th>Reserved Qty</th>
+                    <th>Available Qty</th>
+                    <th>Reorder Level</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stockItems.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                        No warehouse stock records found.
+                      </td>
+                    </tr>
+                  ) : (
+                    stockItems.map((ws) => {
+                      const onHand = ws.quantityOnHand !== undefined ? ws.quantityOnHand : ws.quantity;
+                      const reserved = ws.reservedQty || 0;
+                      const avail = ws.availableQty !== undefined ? ws.availableQty : Math.max(0, onHand - reserved);
+                      const isLow = avail <= ws.reorderLevel;
+
+                      let statusBadgeClass = 'badge-green';
+                      let statusText = 'IN STOCK';
+                      if (onHand === 0) {
+                        statusBadgeClass = 'badge-red';
+                        statusText = 'OUT OF STOCK';
+                      } else if (avail === 0 && reserved > 0) {
+                        statusBadgeClass = 'badge-amber';
+                        statusText = 'RESERVED';
+                      } else if (isLow) {
+                        statusBadgeClass = 'badge-amber';
+                        statusText = 'LOW STOCK';
+                      }
+
+                      return (
+                        <tr key={ws.id}>
+                          <td style={{ fontWeight: '700', color: '#0f172a' }}>
+                            {ws.product?.name || 'Product'}{' '}
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>({ws.product?.sku})</span>
+                          </td>
+                          <td><span className="badge badge-purple">{ws.warehouse?.name || ws.warehouseId}</span></td>
+                          <td><strong>{onHand}</strong></td>
+                          <td style={{ color: '#d97706' }}>{reserved}</td>
+                          <td>
+                            <strong style={{ color: avail > 0 ? '#059669' : '#dc2626' }}>{avail}</strong>
+                          </td>
+                          <td>{ws.reorderLevel}</td>
+                          <td><span className={`badge ${statusBadgeClass}`}>{statusText}</span></td>
+                          <td>
+                            {canModifyStock && (
+                              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button
+                                  onClick={() => openStockModal(ws.product, ws)}
+                                  className="btn btn-outline btn-xs"
+                                >
+                                  Edit Stock
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteStock(ws)}
+                                  className="btn btn-outline btn-xs"
+                                  style={{ color: '#dc2626', borderColor: '#fca5a5' }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1015,7 +1180,23 @@ export default function ProductManagementScreen() {
             <form onSubmit={handleUpdateStock} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div className="form-group">
                 <label className="form-label">Warehouse Location *</label>
-                <select className="form-select" value={stockForm.warehouseId} onChange={(e) => setStockForm({ ...stockForm, warehouseId: e.target.value })} required>
+                <select 
+                  className="form-select" 
+                  value={stockForm.warehouseId} 
+                  onChange={(e) => {
+                    const targetWh = e.target.value;
+                    const existing = stockItems.find((s) => s.warehouseId === targetWh && (s.productId === stockForm.productId || s.productId === selectedProduct?.id));
+                    setSelectedStock(existing || null);
+                    setStockForm({
+                      ...stockForm,
+                      stockId: existing ? existing.id : '',
+                      warehouseId: targetWh,
+                      quantity: existing ? (existing.quantityOnHand !== undefined ? existing.quantityOnHand : existing.quantity) : 0,
+                      reorderLevel: existing ? existing.reorderLevel : 10
+                    });
+                  }} 
+                  required
+                >
                   {warehouses.map((w) => (
                     <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
                   ))}
